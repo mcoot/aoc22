@@ -1,4 +1,8 @@
-## sbt project compiled with Scala 3
+## Advil of cod 2022
+
+### What is this?
+
+Fish painkillers :)
 
 ### Usage
 
