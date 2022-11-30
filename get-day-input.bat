@@ -1,0 +1,1 @@
+bash -c "./get-day-input.sh %1 %2"
