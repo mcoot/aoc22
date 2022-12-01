@@ -7,6 +7,8 @@ object CommonParsers:
 
   val newLine: Parser0[Any] = Parser.char('\r').? ~ Parser.char('\n')
 
+  val blankLine: Parser0[Any] = newLine ~ newLine
+
   val int: Parser[Int] = Numbers.signedIntString.map(_.toInt)
 
   def separated[A](p: Parser[A], sep: Parser0[Any]): Parser[List[A]] =

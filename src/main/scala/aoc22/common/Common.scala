@@ -21,6 +21,11 @@ def withTime[A](f: => A): (A, Long) =
   val end = System.nanoTime()
   (result, (end - start) / 1_000_000)
 
+def inputFilename(day: Int) = s"./data/input/day${day}.in"
+
+def testFilename(day: Int, testSuffix: String = "") =
+  val effectiveSuffix = if testSuffix == "" then testSuffix else s"-${testSuffix}"
+  s"./data/test/day${day}${effectiveSuffix}.in"
 
 trait Solution[I, O1, O2]:
   def dayNumber: Int
@@ -43,19 +48,38 @@ trait Solution[I, O1, O2]:
     runAndPrint(Source.fromFile(filename), label)
 
   final def run(): Unit =
-    runFromFile(s"./data/input/day${dayNumber}.in")
+    runFromFile(inputFilename(dayNumber))
 
   final def test(testSuffix: String = ""): Unit =
-    val effectiveSuffix = if testSuffix == "" then testSuffix else s"-${testSuffix}"
     val effectiveLabel = if testSuffix == "" then "[TEST]" else s"[TEST ${testSuffix}]"
-    runFromFile(s"./data/test/day${dayNumber}${effectiveSuffix}.in", effectiveLabel)
+    runFromFile(testFilename(dayNumber, testSuffix), effectiveLabel)
 
 
 trait SolutionWithParser[I, O1, O2] extends Solution[I, O1, O2]:
   def parser: Parser[I]
 
-  override def preprocess(rawInput: Source): I =
-    parser.parseAll(rawInput.mkString).match {
-      case Left(err) => throw new Exception(s"Failed to parse due to error: ${err}")
-      case Right(value) => value
+  private def execParser[A](parser: Parser[A], source: Source): (String, A) =
+    parser.parse(source.mkString).match {
+      case Left(err) =>
+        throw new Exception(s"Failed to parse due to error: ${err}")
+      case Right(res) => res
     }
+
+  override def preprocess(rawInput: Source): I = execParser(parser, rawInput)._2
+
+  private def testParserOnSource[A](parser: Parser[A], source: Source): Unit =
+    val (leftover, result) = execParser(parser, source)
+    println("Parsed data:")
+    println(result)
+    println("!---\nLeftover:\n---")
+    println(leftover.replace("\n","\\n"))
+    println("!---")
+
+  def testParserStr[A](parser: Parser[A], input: String): Unit =
+    testParserOnSource(parser, Source.fromString(input))
+
+  def testParser[A](parser: Parser[A], testSuffix: String = ""): Unit =
+    testParserOnSource(parser, Source.fromFile(testFilename(dayNumber, testSuffix)))
+
+  def runParser[A](parser: Parser[A]): Unit =
+    testParserOnSource(parser, Source.fromFile(inputFilename(dayNumber)))
