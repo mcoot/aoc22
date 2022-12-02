@@ -4,10 +4,12 @@ import aoc22.common.{CommonParsers, SolutionWithParser}
 import cats.parse.Parser
 import cats.parse.Rfc5234
 
+
 enum Outcome:
   case Win
   case Lose
   case Draw
+
 
 sealed trait Action:
   def beatenBy: Action
@@ -38,13 +40,12 @@ object Actions:
 
   case object Paper extends Action :
     override def beats = Rock
-
     override def beatenBy = Scissors
 
   case object Scissors extends Action :
     override def beats = Paper
-
     override def beatenBy = Rock
+
 
 enum MyAction:
   case X extends MyAction
@@ -61,8 +62,8 @@ enum MyAction:
     case Y => opponent
     case Z => opponent.beatenBy
 
-object Parsing:
 
+object Parsing:
   val opponentParser = Parser.charIn("ABC").map { c =>
     c match
       case 'A' => Actions.Rock
