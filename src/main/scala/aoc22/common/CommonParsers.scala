@@ -11,6 +11,9 @@ object CommonParsers:
 
   val int: Parser[Int] = Numbers.signedIntString.map(_.toInt)
 
+  def pair[A, B](a: Parser[A], b: Parser[B], sep: Parser[Any]) =
+    (a <* sep) ~ b
+  
   def separated[A](p: Parser[A], sep: Parser0[Any]): Parser[List[A]] =
     p.repSep(1, sep).map(_.toList)
 
