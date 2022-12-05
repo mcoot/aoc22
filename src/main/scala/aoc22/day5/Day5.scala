@@ -11,9 +11,9 @@ case class CraneStack(stackIdx: Int, items: List[Item]):
   def topOfStack: Item = items.head
 
 case class CraneState(stacks: Map[Int, CraneStack]):
-  def applyMove(move: Move): CraneState =
-    val toMove = stacks(move.originStack).items.take(move.quantity).reverse
-    println(s"Moving ${toMove} from ${move.originStack} to ${move.destStack}")
+  def applyMove(move: Move, doReverse: Boolean): CraneState =
+    val rawItemsToMove = stacks(move.originStack).items.take(move.quantity)
+    val toMove = if doReverse then rawItemsToMove.reverse else rawItemsToMove
     CraneState(stacks.map { case (idx, stack) =>
       if idx == move.originStack then
         (idx, CraneStack(idx, stack.items.drop(move.quantity)))
@@ -30,10 +30,9 @@ case class CraneState(stacks: Map[Int, CraneStack]):
 case class Move(quantity: Int, originStack: Int, destStack: Int)
 
 case class Program(startState: CraneState, moves: List[Move]):
-  def run: CraneState =
+  def run(doReverse: Boolean): CraneState =
     moves.foldLeft(startState) { case (s, m) =>
-      println(s)
-      s.applyMove(m)
+      s.applyMove(m, doReverse)
     }
 
 
@@ -49,22 +48,27 @@ object Parsing:
   def stackRangeParser: Parser[Range] =
     CommonParsers.withTrimmedStartingSpaces(CommonParsers.spaceSeparated(CommonParsers.int).map { l => l.min to l.max })
 
-  def craneSectionParser: Parser[CraneState] =
-    CommonParsers.pair(CommonParsers.lineSeparated(itemRowParser), stackRangeParser, CommonParsers.newLine)
-      .map { case (itemRows, range) =>
-        val m = range.map { index =>
-          // Zero-indexed idx
-          val actualIndex = index - range.start
-          val filteredItems: List[Item] = itemRows
-            .filter(_.size > actualIndex)
-            .flatMap(_(actualIndex) match {
-              case BlankSpace() => List()
-              case x => List(x.asInstanceOf[Item])
-            })
-          (index, CraneStack(index, filteredItems))
-        }.toMap
-        CraneState(m)
-      }
+  def craneSectionParser: Parser[CraneState] = for
+    itemRows <- CommonParsers.lineSeparated(itemRowParser)
+    _ <- CommonParsers.newLine
+    range <- stackRangeParser
+  yield
+    // Map over all columns
+    val m = range.map { col =>
+      // Zero-indexed column
+      val zeroIndexedCol = col - range.start
+      val columnItems: List[Item] = itemRows
+        // If the list of this row ends before this column, ignore it
+        .filter(_.size > zeroIndexedCol)
+        // Take the items (and not blanks) from all the rows at this column
+        .flatMap(_(zeroIndexedCol) match {
+          case BlankSpace() => List()
+          case x => List(x.asInstanceOf[Item])
+        })
+      // Column definition as tuple for converting to map entry
+      (col, CraneStack(col, columnItems))
+    }.toMap
+    CraneState(m)
 
   def moveParser = for
     _ <- Parser.string("move ")
@@ -88,10 +92,11 @@ object Day5 extends SolutionWithParser[Program, String, String]:
   override def parser: Parser[Program] = Parsing.programParser
 
   override def solvePart1(input: Program): String =
-    input.run.getTopsOfStacks.map(_.id).mkString
+    input.run(true).getTopsOfStacks.map(_.id).mkString
 
 
-  override def solvePart2(input: Program): String = ???
+  override def solvePart2(input: Program): String =
+    input.run(false).getTopsOfStacks.map(_.id).mkString
 
 
 @main def run(): Unit = Day5.run()
@@ -100,4 +105,3 @@ object Day5 extends SolutionWithParser[Program, String, String]:
   Day5.testParser(Parsing.programParser)
 @main def runParser(): Unit =
   Day5.runParser(Parsing.programParser)
-//  Day5.runParser((Parsing.craneSectionParser <* CommonParsers.blankLine) ~ CommonParsers.lineSeparated(Parsing.moveParser))
