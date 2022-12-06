@@ -39,7 +39,7 @@ trait Solution[I, O1, O2]:
   private def runAndPrint(source: Source, label: String = ""): Unit =
       val effectiveLabel = if label == "" then "" else s" ${label}"
       val input = preprocess(source)
-      for (name, f) <- List((s"Part 1${effectiveLabel}", solvePart1), (s"Part 1${effectiveLabel}", solvePart2)) do
+      for (name, f) <- List((s"Part 1${effectiveLabel}", solvePart1), (s"Part 2${effectiveLabel}", solvePart2)) do
         println(s"Executing ${name}:")
         val (result, time) = withTime { f(input) }
         println(s"\tResult: ${result} (${time}ms)")
