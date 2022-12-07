@@ -1,6 +1,6 @@
 package aoc22.common
 
-import cats.parse.{Parser, Parser0, Numbers}
+import cats.parse.{Parser, Parser0, Numbers, Rfc5234}
 
 object CommonParsers:
   val spaces: Parser[Any] = Parser.char(' ').rep
@@ -11,7 +11,15 @@ object CommonParsers:
 
   val int: Parser[Int] = Numbers.signedIntString.map(_.toInt)
 
-  def pair[A, B](a: Parser[A], b: Parser[B], sep: Parser0[Any]) =
+  val alphanum: Parser[Char] = Rfc5234.alpha | Rfc5234.digit
+
+  def char(char: Char): Parser[Char] =
+    Parser.char(char).map(_ => char)
+
+  def string(string: String): Parser[String] =
+    Parser.string(string).map(_ => string)
+
+  def pair[A, B](a: Parser[A], b: Parser[B], sep: Parser0[Any]): Parser[(A, B)] =
     (a <* sep) ~ b
   
   def separated[A](p: Parser[A], sep: Parser0[Any]): Parser[List[A]] =
