@@ -1,6 +1,6 @@
 package aoc22.day7
 
-import scala.collection.mutable.{ArrayBuffer}
+import scala.collection.mutable.ArrayBuffer
 import aoc22.common.SolutionWithParser
 import cats.parse.Parser
 
@@ -113,10 +113,19 @@ object Day7 extends SolutionWithParser[List[TerminalCommand], Int, Int]:
       .walkTree
       .filter(_.isDirectory)
       .map(_.size)
-      .filter(_ < 100000)
+      .filter(_ < 100_000)
       .sum
 
-  override def solvePart2(input: List[TerminalCommand]): Int = ???
+  override def solvePart2(input: List[TerminalCommand]): Int =
+    val tree = buildFileTree(input)
+    val currentlyUnused = 70_000_000 - tree.size
+    val savingNeeded = 30_000_000 - currentlyUnused
+    tree
+      .walkTree
+      .filter(_.isDirectory)
+      .map(_.size)
+      .filter(_ >= savingNeeded)
+      .min
 
 
 @main def run(): Unit = Day7.run()
