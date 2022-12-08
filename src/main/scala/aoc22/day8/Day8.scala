@@ -5,6 +5,9 @@ import cats.parse.{Parser, Rfc5234}
 
 import scala.collection.mutable
 
+case class Surroundings(left: List[Int], right: List[Int], up: List[Int], down: List[Int]):
+  def toList: List[List[Int]] = List(left, right, up, down)
+
 
 case class TreeGrid(arr: Array[Array[Int]]):
   override def toString: String =
@@ -21,6 +24,20 @@ case class TreeGrid(arr: Array[Array[Int]]):
   def getCol(colIdx: Int): List[Int] =
     arr.map(_(colIdx)).toList
 
+  def surroundings(rowIdx: Int, colIdx: Int): Surroundings =
+    val row = getRow(rowIdx)
+    val col = getCol(colIdx)
+    Surroundings(
+      // Look left
+      row.take(colIdx).reverse,
+      // Look right
+      row.drop(colIdx + 1),
+      // Look up
+      col.take(rowIdx).reverse,
+      // Look down
+      col.drop(rowIdx + 1)
+    )
+
   def zipWithIndices: List[(Int, (Int, Int))] =
     arr.zipWithIndex.flatMap { case (row, rowIdx) =>
       row.zipWithIndex.map { case (tree, colIdx) =>
@@ -29,21 +46,23 @@ case class TreeGrid(arr: Array[Array[Int]]):
     }.toList
 
   def isVisible(rowIdx: Int, colIdx: Int): Boolean =
-    val thisTree = this(rowIdx, colIdx)
-    val row = getRow(rowIdx)
-    val col = getCol(colIdx)
-    val conds = List(
-      // Row before this
-      row.take(colIdx).forall(_ < thisTree),
-      // Row after this
-      row.drop(colIdx + 1).forall(_ < thisTree),
-      // Col before this
-      col.take(rowIdx).forall(_ < thisTree),
-      // Col after this
-      col.drop(rowIdx + 1).forall(_ < thisTree),
-    )
-    conds.exists(identity)
+    surroundings(rowIdx, colIdx)
+      .toList
+      .map(_.forall(_ < this(rowIdx, colIdx)))
+      .exists(identity)
 
+  def viewingDistances(rowIdx: Int, colIdx: Int): List[Int] =
+    surroundings(rowIdx, colIdx)
+      .toList
+      .map(dir => dir
+        .zipWithIndex
+        .find(_(0) >= this(rowIdx, colIdx))
+        .map(_(1) + 1)
+        .getOrElse(dir.size)
+      )
+
+  def scenicScore(rowIdx: Int, colIdx: Int): Int =
+    viewingDistances(rowIdx, colIdx).product
 
   def apply(row: Int, col: Int): Int = arr(row)(col)
 
@@ -71,9 +90,15 @@ object Day8 extends SolutionWithParser[TreeGrid, Int, Int]:
   override def parser: Parser[TreeGrid] = Parsing.finalParser
 
   override def solvePart1(input: TreeGrid): Int =
-    input.zipWithIndices.count { case (_, (row, col)) => input.isVisible(row, col) }
+    input
+      .zipWithIndices
+      .count { case (_, (row, col)) => input.isVisible(row, col) }
 
-  override def solvePart2(input: TreeGrid): Int = ???
+  override def solvePart2(input: TreeGrid): Int =
+    input
+      .zipWithIndices
+      .map { case (_, (row, col)) => input.scenicScore(row, col) }
+      .max
 
 
 @main def run(): Unit = Day8.run()
