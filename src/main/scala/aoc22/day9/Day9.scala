@@ -107,7 +107,25 @@ object State:
   def initial(trailingKnots: Int): State = State((0, 0), (0 until trailingKnots).map(_ => (0, 0)).toList)
 
 
-case class ExecutionResult(prevStates: List[State], finalState: State)
+case class ExecutionResult(prevStates: List[State], finalState: State):
+  def printPath: String =
+    val headPositions = (finalState.head :: prevStates.map(_.head)).toSet
+    val allPositions = headPositions.union((finalState.tail ++ prevStates.flatMap(_.tail)).toSet)
+    val minX = allPositions.map(_(0)).min
+    val minY = allPositions.map(_(1)).min
+    val maxX = allPositions.map(_(0)).max
+    val maxY = allPositions.map(_(1)).max
+    val sb = mutable.StringBuilder()
+    for y <- minY to maxY do
+      for x <- minX to maxX do
+        if headPositions.contains((x, y)) then
+          sb.append('#')
+        else if allPositions.contains((x, y)) then
+          sb.append(',')
+        else
+          sb.append('.')
+      sb.append('\n')
+    sb.mkString
 
 
 def executeInstructions(instructions: List[Instruction], startingState: State): ExecutionResult =
