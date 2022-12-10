@@ -16,7 +16,7 @@ enum Instruction(val requiredCycles: Int):
     }
 
 
-class CrtSystem2(program: List[Instruction]):
+class CrtSystem(program: List[Instruction]):
   private val cycleToRegister: MutableMap[Int, Int] = MutableMap()
 
   private var register = 1
@@ -29,7 +29,6 @@ class CrtSystem2(program: List[Instruction]):
   private def isTerminated = remainingProgram.isEmpty && cyclesUntilInstructionComplete == 0
 
   private def step(): Unit =
-//    println(s"Cycle ${cycleNumber} | ${currentInstruction} | ${remainingProgram}")
     // Do nothing if we already terminated
     if isTerminated then
       return ()
@@ -68,85 +67,6 @@ class CrtSystem2(program: List[Instruction]):
     Math.abs(spriteCentre - xPos) <= 1
 
 
-
-
-case class InstructionState(instruction: Instruction, cyclesLeft: Int):
-  def isComplete: Boolean = cyclesLeft <= 0
-
-  def step: InstructionState = InstructionState(instruction, cyclesLeft - 1)
-
-  def updateRegisterIfFinished(register: Int): Int =
-    if isComplete then
-      instruction.updateRegister(register)
-    else
-      register
-
-
-case class SystemState(currentInstruction: InstructionState, cycleNumber: Int, register: Int):
-  def finishInstruction(newInstruction: Instruction): SystemState =
-    SystemState(
-      InstructionState(newInstruction, newInstruction.requiredCycles),
-      cycleNumber,
-      currentInstruction.updateRegisterIfFinished(register)
-    )
-
-  def step: SystemState =
-    SystemState(currentInstruction.step, cycleNumber + 1, register)
-
-  def signalStrength: Int = cycleNumber * register
-
-  private def xPosition = cycleNumber % 40
-  private def spriteCentre: Int = register % 40
-
-  def spriteHasPixel: Boolean = Math.abs(spriteCentre - xPosition) <= 1
-
-
-object SystemState:
-  def initial: SystemState = SystemState(InstructionState(Instruction.Noop, 0), 0, 1)
-
-
-class CrtSystem(initialState: SystemState, program: List[Instruction]):
-  private var currentState = initialState
-  private val pastStates: MutableMap[Int, SystemState] = MutableMap()
-
-  private var executingProgram = program
-
-  def isTerminated: Boolean = executingProgram.isEmpty
-
-  def getStateAtCycle(cycleNumber: Int): SystemState =
-    pastStates.getOrElse(cycleNumber, currentState)
-
-  def cyclesProcessed: Int = currentState.cycleNumber
-
-  private def step(): Unit =
-    // Store this state as a known past state
-    pastStates.addOne((currentState.cycleNumber, currentState))
-
-    // Do nothing if we have finished our program
-    if isTerminated then
-      return ()
-
-    // Increment cycle and update register if instruction complete
-    currentState = currentState.step
-
-    // If we finished our last instruction, update the register and feed a new one in
-    if currentState.currentInstruction.isComplete then
-      // Update the state to add the new instruction
-      currentState = currentState.finishInstruction(executingProgram.head)
-      executingProgram = executingProgram.tail
-
-    val spriteVal = if currentState.spriteHasPixel then '#' else '.'
-    println(
-      s"cycle ${currentState.cycleNumber} " +
-        s"| Instr ${currentState.currentInstruction.instruction} rem ${currentState.currentInstruction.cyclesLeft} " +
-        s"| Register ${currentState.register} | Sprite ${spriteVal}"
-    )
-
-  def exec(): Unit =
-    while !isTerminated do
-      step()
-
-
 object Parsing:
   private def noopParser = Parser.string("noop").map(_ => Instruction.Noop)
 
@@ -158,7 +78,7 @@ object Parsing:
 
   private def instructionParser: Parser[Instruction] = noopParser | addxParser
 
-  def inputParser = CommonParsers.lineSeparated(instructionParser)
+  def inputParser: Parser[List[Instruction]] = CommonParsers.lineSeparated(instructionParser)
 
 
 object Day10 extends SolutionWithParser[List[Instruction], Int, Int]:
@@ -167,16 +87,15 @@ object Day10 extends SolutionWithParser[List[Instruction], Int, Int]:
   override def parser: Parser[List[Instruction]] = Parsing.inputParser
 
   override def solvePart1(input: List[Instruction]): Int =
-    val system = CrtSystem2(input)
+    val system = CrtSystem(input)
     system.exec()
     List(20, 60, 100, 140, 180, 220)
       .map(system.signalStrength)
       .sum
 
   override def solvePart2(input: List[Instruction]): Int =
-    val system = CrtSystem2(input)
+    val system = CrtSystem(input)
     system.exec()
-//    println((1 to 22).map(c => (c, system.getStateAtCycle(c).register)))
     val resultString = (1 to system.getCycleNumber)
       .grouped(40)
       .flatMap { row =>
