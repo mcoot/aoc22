@@ -6,44 +6,6 @@ import cats.parse.Parser
 
 import scala.annotation.targetName
 
-//
-//def primeFactors(n: Int): Set[Int] =
-//  def rec(n: Int, factor: Int): Set[Int] =
-//    // Base case, only need to check up to sqrt(n)
-//    if factor * factor > n then
-//      // n and 1 always factors of themselves
-//      Set(n, 1)
-//    else if n % factor == 0 then
-//      // Factor found
-//      rec(n / factor, factor) + factor
-//    else
-//      // Continue checking factors
-//      rec(n, factor + 1)
-//
-//  // Start at 2 and work up
-//  rec(n, 2)
-//
-//
-//case class WorryLevel(primeFactors: Set[Int]):
-//  def this(initialValue: Int) =
-//    this(primeFactors(initialValue))
-//
-//  def hasFactor(prime: Int): Boolean = primeFactors.contains(prime)
-//
-//  // No way to do addition without prime factoring the new value...
-//  @targetName("add")
-//  def +(other: Int): WorryLevel = ???
-//
-//  @targetName("multiply")
-//  def *(other: Int): WorryLevel = ???
-//
-//  def square: WorryLevel = ???
-//
-//  def moduloFactor(factor: Int): WorryLevel =
-//    if !hasFactor(factor) then
-//      throw Exception("Cannot modulo by non-factor")
-//    WorryLevel(primeFactors - factor)
-
 
 case class MonkeyId(id: Int)
 
