@@ -36,3 +36,6 @@ object CommonParsers:
 
   def withTrimmedStartingSpaces[A](p: Parser[A]): Parser[A] =
     (spaces.?).with1 *> p
+
+  def indented[A](p: Parser[A], indent: Int): Parser[A] =
+    Parser.char(' ').rep(indent, indent) *> p
