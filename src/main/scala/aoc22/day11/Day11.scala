@@ -76,14 +76,10 @@ class MonkeyGroup(initialState: Map[MonkeyId, Monkey], decreaseWorryAfterInspect
   // To start with no monkey has performed inspections
   private val inspectionsPerformed = MutableMap.from(initialState.view.mapValues(_ => 0L))
 
-  // In part 1 we don't need this
-  // In part 2 we modulo by the product of all the divisor tests
+  // Doesn't matter for part 1
+  // Modulo by the product of all the divisor tests
   // to keep from overflowing
-  private val overallModuloFactor =
-    if decreaseWorryAfterInspections then
-      None
-    else
-      Some(initialState.values.map(_.test.factor).product)
+  private val overallModuloFactor = initialState.values.map(_.test.factor).product
 
   // The actual number of monkeys doesn't change
   private def sortedMonkeyIds = initialState.keys.toList.sortBy(_.id)
@@ -100,7 +96,7 @@ class MonkeyGroup(initialState: Map[MonkeyId, Monkey], decreaseWorryAfterInspect
     inspectedAndThrown.groupBy { case (_, id) => id }
       .foreach { case (receivingMonkey, items) =>
         state(receivingMonkey) = state(receivingMonkey).acceptItems(items.map { case (item, _) =>
-          overallModuloFactor.map(item % _).getOrElse(item)
+          item % overallModuloFactor
         })
       }
 
