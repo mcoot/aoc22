@@ -2,13 +2,78 @@ package aoc22.day12
 
 import aoc22.common.{CommonParsers, SolutionWithParser}
 import cats.parse.Parser
+import scala.collection.mutable.Map as MutableMap
 
 
 def heightFromChar(char: Char): Int = char - 'a'
 def heightToChar(height: Int): Char = ('a' + height).toChar
 
 
-case class Terrain(terrain: Array[Array[Int]], start: (Int, Int), end: (Int, Int))
+case class Terrain(terrain: Array[Array[Int]], start: (Int, Int), end: (Int, Int)):
+  def apply(pos: (Int, Int)): Int =
+    if !inBounds(pos) then
+      throw Exception(s"Accessing invalid position ${pos}")
+    val (r, c) = pos
+    terrain(r)(c)
+
+  def inBounds(pos: (Int, Int)): Boolean =
+    val (r, c) = pos
+    r >= 0 && c >= 0 && r < terrain.length && c < terrain(r).length
+
+  def elevationDiff(posFrom: (Int, Int), posTo: (Int, Int)): Int =
+    if !inBounds(posFrom) || !inBounds(posTo) then
+      throw Exception(s"Finding elevation for invalid positions ${posFrom} ${posTo}")
+    this(posTo) - this(posFrom)
+
+
+  def accessibleNeighbours(pos: (Int, Int)): Set[(Int, Int)] =
+    val (r, c) = pos
+    // Up, down, left, right
+    val neighbours = List(
+      (r - 1, c),
+      (r + 1, c),
+      (r, c - 1),
+      (r, c + 1),
+    )
+    neighbours
+      .filter(p => inBounds(p) && elevationDiff(pos, p) <= 1)
+      .toSet
+
+// Returns a reversed list (end first)
+def findBestPathToEnd(terrain: Terrain): List[(Int, Int)] =
+  val memo: MutableMap[(Int, Int), Option[List[(Int, Int)]]] = MutableMap.empty
+
+  def dfsRec(visited: Set[(Int, Int)], pos: (Int, Int)): Option[List[(Int, Int)]] =
+    // Base case: are we already at the end?
+    if terrain.end == pos then
+      val bestFromHere = Some(List(terrain.end))
+      memo.put(pos, bestFromHere)
+
+    // Memoized case: have we already found the best path from here?
+    if memo.contains(pos) then
+      return memo(pos)
+
+    // Search out the possibilities from here
+    val fromHere = terrain
+      // Find the neighbouring tiles that are accessible
+      .accessibleNeighbours(pos)
+      // Filter out ones we've already tracked down
+      .filter(!visited.contains(_))
+      // Find the best paths from each neighbour to the goal
+      .map { neighbourPos =>
+        dfsRec(visited + pos, neighbourPos)
+          .map(pos :: _)
+      }
+    // Take the best one from here
+    val bestFromHere = if !fromHere.exists(_.isDefined) then
+      None
+    else
+      fromHere.filter(_.isDefined).minBy(_.get.size)
+    memo.put(pos, bestFromHere)
+    print(pos)
+    bestFromHere
+
+  dfsRec(Set.empty, terrain.start).get
 
 
 object Parsing:
@@ -50,7 +115,8 @@ object Day12 extends SolutionWithParser[Terrain, Int, Int]:
 
   override def parser: Parser[Terrain] = Parsing.inputParser
 
-  override def solvePart1(input: Terrain): Int = ???
+  override def solvePart1(input: Terrain): Int =
+    findBestPathToEnd(input).size - 1
 
   override def solvePart2(input: Terrain): Int = ???
 
