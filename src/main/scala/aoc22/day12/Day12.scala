@@ -2,7 +2,11 @@ package aoc22.day12
 
 import aoc22.common.{CommonParsers, SolutionWithParser}
 import cats.parse.Parser
-import scala.collection.mutable.Map as MutableMap
+
+import scala.collection.mutable
+import scala.collection.mutable.{Map as MutableMap, Set as MutableSet}
+import java.util.{Comparator, PriorityQueue}
+import scala.util.control.Breaks.break
 
 
 def heightFromChar(char: Char): Int = char - 'a'
@@ -15,6 +19,13 @@ case class Terrain(terrain: Array[Array[Int]], start: (Int, Int), end: (Int, Int
       throw Exception(s"Accessing invalid position ${pos}")
     val (r, c) = pos
     terrain(r)(c)
+
+  def allPositions: Seq[(Int, Int)] =
+    for
+      row <- terrain.indices
+      col <- terrain(row).indices
+    yield
+      (row, col)
 
   def inBounds(pos: (Int, Int)): Boolean =
     val (r, c) = pos
@@ -39,41 +50,75 @@ case class Terrain(terrain: Array[Array[Int]], start: (Int, Int), end: (Int, Int
       .filter(p => inBounds(p) && elevationDiff(pos, p) <= 1)
       .toSet
 
-// Returns a reversed list (end first)
+case class TerrainDist(pos: (Int, Int), dist: Int, prior: Option[(Int, Int)])
+
+// Dijkstra's
 def findBestPathToEnd(terrain: Terrain): List[(Int, Int)] =
-  val memo: MutableMap[(Int, Int), Option[List[(Int, Int)]]] = MutableMap.empty
+  // Map of distances and the previous cell to backtrack from
+  val distances: MutableMap[(Int, Int), TerrainDist] =
+    MutableMap.from(terrain.allPositions.map(p => (p, TerrainDist(p, Int.MaxValue, None))))
 
-  def dfsRec(visited: Set[(Int, Int)], pos: (Int, Int)): Option[List[(Int, Int)]] =
-    // Base case: are we already at the end?
-    if terrain.end == pos then
-      val bestFromHere = Some(List(terrain.end))
-      memo.put(pos, bestFromHere)
+  // Set the start's prior cell to be itself
+  distances(terrain.start) = TerrainDist(terrain.start, 0, Some(terrain.start))
 
-    // Memoized case: have we already found the best path from here?
-    if memo.contains(pos) then
-      return memo(pos)
+  // Set up a PQ - it's a max-pq so invert distance metric
+  val pq = PriorityQueue[TerrainDist](1, Comparator.comparing(-_.dist))
+  pq.offer(distances(terrain.start))
 
-    // Search out the possibilities from here
-    val fromHere = terrain
-      // Find the neighbouring tiles that are accessible
-      .accessibleNeighbours(pos)
-      // Filter out ones we've already tracked down
-      .filter(!visited.contains(_))
-      // Find the best paths from each neighbour to the goal
-      .map { neighbourPos =>
-        dfsRec(visited + pos, neighbourPos)
-          .map(pos :: _)
-      }
-    // Take the best one from here
-    val bestFromHere = if !fromHere.exists(_.isDefined) then
-      None
-    else
-      fromHere.filter(_.isDefined).minBy(_.get.size)
-    memo.put(pos, bestFromHere)
-    print(pos)
-    bestFromHere
+  // Dijkstra this
+  while !pq.isEmpty do
+    val td = pq.poll()
 
-  dfsRec(Set.empty, terrain.start).get
+    terrain.accessibleNeighbours(td.pos).foreach { n =>
+      val distViaHere = td.dist + 1
+      if distViaHere < distances(n).dist then
+        distances(n) = TerrainDist(n, distViaHere, Some(td.pos))
+        pq.offer(distances(n))
+    }
+
+  // Trace back the shortest path
+  var l: List[(Int, Int)] = List()
+  var c = terrain.end
+  while c != terrain.start do
+    l = c :: l
+    c = distances(c).prior.get
+
+  c :: l.reverse
+
+
+//  val memo: MutableMap[(Int, Int), Option[List[(Int, Int)]]] = MutableMap.empty
+//
+//  def dfsRec(visited: Set[(Int, Int)], pos: (Int, Int)): Option[List[(Int, Int)]] =
+//    // Base case: are we already at the end?
+//    if terrain.end == pos then
+//      val bestFromHere = Some(List(terrain.end))
+//      memo.put(pos, bestFromHere)
+//
+//    // Memoized case: have we already found the best path from here?
+//    if memo.contains(pos) then
+//      return memo(pos)
+//
+//    // Search out the possibilities from here
+//    val fromHere = terrain
+//      // Find the neighbouring tiles that are accessible
+//      .accessibleNeighbours(pos)
+//      // Filter out ones we've already tracked down
+//      .filter(!visited.contains(_))
+//      // Find the best paths from each neighbour to the goal
+//      .map { neighbourPos =>
+//        dfsRec(visited + pos, neighbourPos)
+//          .map(pos :: _)
+//      }
+//    // Take the best one from here
+//    val bestFromHere = if !fromHere.exists(_.isDefined) then
+//      None
+//    else
+//      fromHere.filter(_.isDefined).minBy(_.get.size)
+//    memo.put(pos, bestFromHere)
+//    print(pos)
+//    bestFromHere
+//
+//  dfsRec(Set.empty, terrain.start).get
 
 
 object Parsing:
