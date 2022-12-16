@@ -6,6 +6,7 @@ import cats.parse.Parser
 import scala.collection.mutable
 import scala.collection.mutable.{Map as MutableMap, Set as MutableSet}
 import java.util.{Comparator, PriorityQueue}
+import scala.collection
 import scala.util.control.Breaks.break
 
 
@@ -47,23 +48,25 @@ case class Terrain(terrain: Array[Array[Int]], start: (Int, Int), end: (Int, Int
       (r, c + 1),
     )
     neighbours
-      .filter(p => inBounds(p) && elevationDiff(pos, p) <= 1)
+      // This elevation check is actually reversed from the rules
+      // because we reverse start/end in our inputs
+      .filter(p => inBounds(p) && elevationDiff(p, pos) <= 1)
       .toSet
 
 case class TerrainDist(pos: (Int, Int), dist: Int, prior: Option[(Int, Int)])
 
 // Dijkstra's
-def findBestPathToEnd(terrain: Terrain): List[(Int, Int)] =
+def findBestPathsToEnd(terrain: Terrain, startPos: (Int, Int), endPositions: List[(Int, Int)]): List[List[(Int, Int)]] =
   // Map of distances and the previous cell to backtrack from
   val distances: MutableMap[(Int, Int), TerrainDist] =
     MutableMap.from(terrain.allPositions.map(p => (p, TerrainDist(p, Int.MaxValue, None))))
 
   // Set the start's prior cell to be itself
-  distances(terrain.start) = TerrainDist(terrain.start, 0, Some(terrain.start))
+  distances(startPos) = TerrainDist(startPos, 0, Some(startPos))
 
   // Set up a PQ - it's a max-pq so invert distance metric
   val pq = PriorityQueue[TerrainDist](1, Comparator.comparing(-_.dist))
-  pq.offer(distances(terrain.start))
+  pq.offer(distances(startPos))
 
   // Dijkstra this
   while !pq.isEmpty do
@@ -76,49 +79,24 @@ def findBestPathToEnd(terrain: Terrain): List[(Int, Int)] =
         pq.offer(distances(n))
     }
 
-  // Trace back the shortest path
-  var l: List[(Int, Int)] = List()
-  var c = terrain.end
-  while c != terrain.start do
-    l = c :: l
-    c = distances(c).prior.get
+  // Trace back the shortest paths from each end pos and discard any that don't actually connect
+  endPositions.flatMap { endPos =>
+    // Trace back to the start, if possible
+    val attemptedTrace = (endPos :: Iterable.unfold(endPos) { pos =>
+      val td = distances(pos)
+      td match
+        // If prior is none there is no path that can be traced back
+        case TerrainDist(_, _, None) => None
+        // If prior is itself we're at the start
+        case TerrainDist(_, _, Some(prior)) if prior == td.pos => None
+        case TerrainDist(_, _, Some(prior)) => Some((prior, prior))
+    }.toList).reverse
 
-  c :: l.reverse
-
-
-//  val memo: MutableMap[(Int, Int), Option[List[(Int, Int)]]] = MutableMap.empty
-//
-//  def dfsRec(visited: Set[(Int, Int)], pos: (Int, Int)): Option[List[(Int, Int)]] =
-//    // Base case: are we already at the end?
-//    if terrain.end == pos then
-//      val bestFromHere = Some(List(terrain.end))
-//      memo.put(pos, bestFromHere)
-//
-//    // Memoized case: have we already found the best path from here?
-//    if memo.contains(pos) then
-//      return memo(pos)
-//
-//    // Search out the possibilities from here
-//    val fromHere = terrain
-//      // Find the neighbouring tiles that are accessible
-//      .accessibleNeighbours(pos)
-//      // Filter out ones we've already tracked down
-//      .filter(!visited.contains(_))
-//      // Find the best paths from each neighbour to the goal
-//      .map { neighbourPos =>
-//        dfsRec(visited + pos, neighbourPos)
-//          .map(pos :: _)
-//      }
-//    // Take the best one from here
-//    val bestFromHere = if !fromHere.exists(_.isDefined) then
-//      None
-//    else
-//      fromHere.filter(_.isDefined).minBy(_.get.size)
-//    memo.put(pos, bestFromHere)
-//    print(pos)
-//    bestFromHere
-//
-//  dfsRec(Set.empty, terrain.start).get
+    if attemptedTrace.head != startPos then
+      None
+    else
+      Some(attemptedTrace)
+  }
 
 
 object Parsing:
@@ -161,9 +139,16 @@ object Day12 extends SolutionWithParser[Terrain, Int, Int]:
   override def parser: Parser[Terrain] = Parsing.inputParser
 
   override def solvePart1(input: Terrain): Int =
-    findBestPathToEnd(input).size - 1
+    // Treat the end as the start for consistency with pt2
+    findBestPathsToEnd(input, input.end, List(input.start)).head.size - 1
 
-  override def solvePart2(input: Terrain): Int = ???
+  override def solvePart2(input: Terrain): Int =
+    // Treat the end as the start
+    // Because dijkstra's is single-source all-ends
+    val minElevationPositions = input.allPositions.filter(input(_) == 0)
+    val paths = findBestPathsToEnd(input, input.end, minElevationPositions.toList)
+    val pathSizes = paths.map(_.size - 1)
+    pathSizes.min
 
 
 @main def run(): Unit = Day12.run()
