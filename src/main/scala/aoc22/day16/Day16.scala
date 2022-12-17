@@ -159,16 +159,15 @@ object NetworkStateAtTime:
   def initial(network: Network): NetworkStateAtTime = NetworkStateAtTime(NetworkState.initial(network), 0)
 
 
-case class NetworkSolution(network: Network, actions: List[Action]):
+case class NetworkSolution(st: NetworkStateAtTime, actions: List[Action]):
   // The list of states the network passes through when the actions are applied
   val states: List[NetworkStateAtTime] =
-    val ss = actions
-      .foldLeft(List(NetworkStateAtTime.initial(network))) { (s, a) =>
-        s.head.act(a).getOrElse {
-          throw Exception("Invalid action!")
-        } :: s
-      }
-    ss.reverse
+    actions
+      .foldLeft(List(st)) { (s, a) =>
+        s.head.act(a) match
+          case Left(err) => throw Exception(s"Invalid action ${a} from (at=${s.head.state.currentlyAt},time=${s.head.time}): ${err}!")
+          case Right(newState) => newState :: s
+      }.reverse
 
   // Full listing of actions taken and the state at time
   // With interpolations while moving or after ending
@@ -189,7 +188,7 @@ case class NetworkSolution(network: Network, actions: List[Action]):
           List((startState, Some(action)))
         // Moving takes as many interpolations as there are steps in the path between the valves
         case Action.MoveTo(id) =>
-          val steps = network.paths((startState.state.currentlyAt, id))
+          val steps = st.state.network.paths((startState.state.currentlyAt, id))
 
           // Include the state we're at
           (startState.state.currentlyAt :: steps)
@@ -228,7 +227,10 @@ class Solver(val network: Network):
     // What valves other than this one could we go to and then open given the time left?
     // Opening takes one minute, so we need at least the distance plus one minute
     val valvesWeCouldGetToAndOpen = st.state.closedValves
+      // Filter out the current node and anything we can't reach in time
       .filter(v => st.state.currentlyAt != v && network.distance(st.state.currentlyAt, v) + 1 < st.timeLeft)
+      // Filter out anything that produces zero flow
+      .filter(v => network.vertices(v).flowRate != 0)
 
     // If there's nothing we can get to, and the current valve is open, no point doing anything but stopping
     if valvesWeCouldGetToAndOpen.isEmpty && st.state.isCurrentValveOpen then
@@ -243,29 +245,33 @@ class Solver(val network: Network):
     else
       moveActions
 
-  private def possibleSolutionsFrom(st: NetworkStateAtTime, depth: Int, cache: MutableMap[NetworkStateAtTime, List[List[Action]]]): List[List[Action]] =
+  private def bestSolutionFrom(st: NetworkStateAtTime, depth: Int, cache: MutableMap[NetworkStateAtTime, NetworkSolution]): NetworkSolution =
     val possibleActionsFromHere = possibleActionsFromState(st)
 //    println(s"depth=${depth} | at=${st.state.currentlyAt.name} | time=${st.time} | actionsFromHere=${possibleActionsFromHere} | cacheSize=${cache.size}")
 
     // Base case: at the max time there is nothing further we can do
     if possibleActionsFromHere.isEmpty then
-      return List(List())
+      return NetworkSolution(st, List())
 
-    var pathsFromHere: List[List[Action]] = List()
-    // Try all possible actions from here and see where they lead
-    for action <- possibleActionsFromHere do
+    val solsFromHere = possibleActionsFromHere.map { action =>
+//      println(s"Trying action ${action}...")
       val nextState = st.act(action).getOrElse {
         throw Exception("Invalid action!")
       }
-      val newPathsFound =
-        if cache.contains(nextState) then
-          cache(nextState)
-        else
-          val newPathsAfterHere = possibleSolutionsFrom(nextState, depth + 1, cache)
-          cache(nextState) = newPathsAfterHere
-          newPathsAfterHere
-      pathsFromHere = pathsFromHere ++ newPathsFound.map(action :: _)
-    pathsFromHere
+
+      if cache.contains(nextState) then
+//        println("[Already cached]")
+        NetworkSolution(st, action :: cache(nextState).actions)
+      else
+//        println("[Finding]")
+        val bestPathFromNext = bestSolutionFrom(nextState, depth + 1, cache)
+        cache(nextState) = bestPathFromNext
+        NetworkSolution(st, action :: bestPathFromNext.actions)
+    }
+
+    val res = solsFromHere.maxBy(ns => ns.totalPressureReleased)
+//    println(s"Best sol from here releases pressure ${res.totalPressureReleased}")
+    res
 
 
 //    possibleActionsFromHere.flatMap { action =>
@@ -289,11 +295,7 @@ class Solver(val network: Network):
   // Solve the network to find the best sequence of actions that can be taken
   // maximising flow integrated over t=0 to t=29
   def solve: NetworkSolution =
-    val possibleSolutions =
-      possibleSolutionsFrom(NetworkStateAtTime.initial(network), 1, MutableMap.empty)
-        .map(NetworkSolution(network, _))
-
-    possibleSolutions.minBy(_.totalPressureReleased)
+    bestSolutionFrom(NetworkStateAtTime.initial(network), 1, MutableMap.empty)
 
 
 object Parsing:
@@ -319,7 +321,7 @@ object Parsing:
 object Testing:
   def testSolutionForPart1(network: Network): NetworkSolution =
     NetworkSolution(
-      network,
+      NetworkStateAtTime.initial(network),
       List(
         Action.MoveTo(ValveId("DD")),
         Action.OpenValve,
