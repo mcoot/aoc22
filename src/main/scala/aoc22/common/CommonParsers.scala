@@ -21,7 +21,7 @@ object CommonParsers:
 
   def pair[A, B](a: Parser[A], b: Parser[B], sep: Parser0[Any]): Parser[(A, B)] =
     (a <* sep) ~ b
-  
+
   def separated[A](p: Parser[A], sep: Parser0[Any]): Parser[List[A]] =
     p.repSep(1, sep).map(_.toList)
 
