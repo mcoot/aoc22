@@ -201,10 +201,11 @@ case class NetworkSolution(network: Network, actions: List[Action]):
         // Ending should just interpolate the same state through to the after point (i.e. the end time)
         case Action.End =>
           val timeRange = startState.time until endState.time
-          (startState, Some(action)) :: timeRange.map(t => (startState.copy(time = t), Some(Action.End))).toList
+          timeRange.map(t => (startState.copy(time = t), Some(Action.End))).toList
     }
 
-  def totalPressureReleased: Int = ???
+  def totalPressureReleased: Int =
+    interpolatedStates.map { case (s, _) => s.state.totalFlowPerMinute }.sum
 
 
 class Solver(val network: Network):
@@ -286,6 +287,8 @@ object Testing:
       if aStr.nonEmpty then
         println(genActionString(a.get, s.state.currentlyAt))
       println()
+
+    println(s"Total pressure released: ${sol.totalPressureReleased}")
 
   def verifyTestSolution(network: Network): Unit = printStateLog(testSolutionForPart1(network))
 
