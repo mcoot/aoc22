@@ -1,6 +1,6 @@
 package aoc22.day18
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.Set as MutableSet
 import aoc22.common.{CommonParsers, SolutionWithParser}
 import cats.parse.Parser
 
@@ -20,14 +20,26 @@ case class Cube(x: Int, y: Int, z: Int):
   def isAdjacentTo(other: Cube): Boolean = adjacencies.contains(other)
 
 
-def findSurfaceArea(cubes: List[Cube]): Int =
-  val cubeCartesian =
-    for
-      a <- cubes
-      b <- cubes
-    yield (a, b)
-  cubes.size * 6 - cubeCartesian.count { case (a, b) => a.isAdjacentTo(b) }
+def findSurfaceAreaPart1(cubes: List[Cube]): Int =
+  val cubeCartesian: MutableSet[(Cube, Cube)] = MutableSet.empty
+  for
+    a <- cubes
+    b <- cubes
+    if a != b && !cubeCartesian.contains((a, b)) && !cubeCartesian.contains((b, a))
+  do
+    cubeCartesian.addOne((a, b))
+  cubes.size * 6 - 2 * cubeCartesian.count { case (a, b) => a.isAdjacentTo(b) }
 
+
+case class CubeInDroplet(cube: Cube, neighbours: (Option[Cube], Option[Cube], Option[Cube], Option[Cube], Option[Cube], Option[Cube]))
+
+
+case class Droplet(cubes: List[Cube]):
+  def cubeGraph: Map[Cube, CubeInDroplet] =
+    ???
+
+  def externalSurfaceArea: Int =
+    ???
 
 
 object Day18 extends SolutionWithParser[List[Cube], Int, Int]:
@@ -39,9 +51,11 @@ object Day18 extends SolutionWithParser[List[Cube], Int, Int]:
         .map(Cube.apply)
     )
 
-  override def solvePart1(input: List[Cube]): Int = findSurfaceArea(input)
+  override def solvePart1(input: List[Cube]): Int =
+    findSurfaceAreaPart1(input)
 
-  override def solvePart2(input: List[Cube]): Int = ???
+  override def solvePart2(input: List[Cube]): Int =
+    Droplet(input).externalSurfaceArea
 
 
 @main def run(): Unit = Day18.run()
