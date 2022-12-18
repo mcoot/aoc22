@@ -22,6 +22,16 @@ object CommonParsers:
   def pair[A, B](a: Parser[A], b: Parser[B], sep: Parser0[Any]): Parser[(A, B)] =
     (a <* sep) ~ b
 
+  def triple[A, B, C](a: Parser[A], b: Parser[B], c: Parser[C], sep: Parser0[Any]): Parser[(A, B, C)] =
+    for
+      aVal <- a
+      _ <- sep
+      bVal <- b
+      _ <- sep
+      cVal <- c
+    yield
+      (aVal, bVal, cVal)
+
   def separated[A](p: Parser[A], sep: Parser0[Any]): Parser[List[A]] =
     p.repSep(1, sep).map(_.toList)
 
