@@ -8,38 +8,41 @@ import cats.parse.Parser
 case class Cube(x: Int, y: Int, z: Int):
   def this(t: (Int, Int, Int)) = this(t(0), t(1), t(2))
 
-  def adjacencies: List[Cube] = List(
-    Cube(x - 1, y, z),
-    Cube(x + 1, y, z),
-    Cube(x, y - 1, z),
-    Cube(x, y + 1, z),
-    Cube(x, y, z - 1),
-    Cube(x, y, z + 1),
-  )
+  def maximalAdjacency: CubeInDroplet = CubeInDroplet(this, List(
+    Some(Cube(x - 1, y, z)),
+    Some(Cube(x + 1, y, z)),
+    Some(Cube(x, y - 1, z)),
+    Some(Cube(x, y + 1, z)),
+    Some(Cube(x, y, z - 1)),
+    Some(Cube(x, y, z + 1)),
+  ))
 
-  def isAdjacentTo(other: Cube): Boolean = adjacencies.contains(other)
+  def adjacentPositions: List[Cube] =
+    maximalAdjacency.neighbours.map(_.get)
 
-
-def findSurfaceAreaPart1(cubes: List[Cube]): Int =
-  val cubeCartesian: MutableSet[(Cube, Cube)] = MutableSet.empty
-  for
-    a <- cubes
-    b <- cubes
-    if a != b && !cubeCartesian.contains((a, b)) && !cubeCartesian.contains((b, a))
-  do
-    cubeCartesian.addOne((a, b))
-  cubes.size * 6 - 2 * cubeCartesian.count { case (a, b) => a.isAdjacentTo(b) }
+  def isAdjacentTo(other: Cube): Boolean = adjacentPositions.contains(other)
 
 
-case class CubeInDroplet(cube: Cube, neighbours: (Option[Cube], Option[Cube], Option[Cube], Option[Cube], Option[Cube], Option[Cube]))
+// List always of size 6
+// easier than using a tuple
+case class CubeInDroplet(cube: Cube, neighbours: List[Option[Cube]])
 
 
 case class Droplet(cubes: List[Cube]):
+  val cubeSet: Set[Cube] = cubes.toSet
+
   def cubeGraph: Map[Cube, CubeInDroplet] =
-    ???
+    cubes.map { cube =>
+      (cube, CubeInDroplet(cube, cube.maximalAdjacency.neighbours.map { n =>
+        Some(n.get).filter(cubeSet.contains)
+      }))
+    }.toMap
+
+  def totalSurfaceArea: Int =
+    cubeGraph.values.map(c => c.neighbours.count(_.isEmpty)).sum
 
   def externalSurfaceArea: Int =
-    ???
+    cubeGraph.values.map(c => c.neighbours.count(_.isEmpty)).sum
 
 
 object Day18 extends SolutionWithParser[List[Cube], Int, Int]:
@@ -52,7 +55,7 @@ object Day18 extends SolutionWithParser[List[Cube], Int, Int]:
     )
 
   override def solvePart1(input: List[Cube]): Int =
-    findSurfaceAreaPart1(input)
+    Droplet(input).totalSurfaceArea
 
   override def solvePart2(input: List[Cube]): Int =
     Droplet(input).externalSurfaceArea
