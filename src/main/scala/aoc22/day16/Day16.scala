@@ -5,9 +5,6 @@ import aoc22.common.{CommonParsers, SolutionWithParser}
 import cats.parse.Parser
 
 
-// 0-indexed!
-val TIME_MAX = 29
-
 case class ValveId(name: String)
 
 
@@ -18,7 +15,7 @@ object ValveId:
 case class Valve(id: ValveId, flowRate: Int, neighbours: Set[ValveId])
 
 
-case class Network(definitions: List[Valve]):
+case class Network(definitions: List[Valve], maxTime: Int):
   val vertices: Map[ValveId, Valve] = Map.from(definitions.map(v => (v.id, v)))
   val edges: Set[(ValveId, ValveId)] = definitions.flatMap(v => v.neighbours.map((v.id, _))).toSet
 
@@ -84,7 +81,7 @@ enum ActionError:
   case NotEnoughTimeToComplete
 
 
-case class NetworkState(network: Network, openValves: Set[ValveId], currentlyAt: ValveId):
+case class NetworkState(network: Network, openValves: Set[ValveId], currentlyAt: ValveId, helperCurrentlyAt: ValveId):
   def closedValves: Set[ValveId] = network.vertices.keys.toSet -- openValves
 
   def currentValve: Valve = network.vertices(currentlyAt)
@@ -102,7 +99,7 @@ case class NetworkState(network: Network, openValves: Set[ValveId], currentlyAt:
     // Moving to a valve takes one minute per valve you need to traverse, including the end
     case Action.MoveTo(id) => network.distance(currentlyAt, id)
     // Ending your actions consumes the rest of the time available
-    case Action.End => TIME_MAX - currentTime
+    case Action.End => network.maxTime - currentTime
 
   def flowRateIncreaseOfAction(action: Action): Int = action match
     case Action.OpenValve if !isCurrentValveOpen => currentValve.flowRate
@@ -110,11 +107,11 @@ case class NetworkState(network: Network, openValves: Set[ValveId], currentlyAt:
 
 
 object NetworkState:
-  def initial(network: Network): NetworkState = NetworkState(network, Set.empty, ValveId.initial)
+  def initial(network: Network): NetworkState = NetworkState(network, Set.empty, ValveId.initial, ValveId.initial)
 
 
 case class NetworkStateAtTime(state: NetworkState, time: Int):
-  def timeLeft: Int = TIME_MAX - time
+  def timeLeft: Int = state.network.maxTime - time
 
   // Figure out how an action would fail, if it would
   def actionFailureMode(action: Action): Option[ActionError] =
@@ -171,7 +168,7 @@ case class NetworkSolution(st: NetworkStateAtTime, actions: List[Action]):
 
   // Full listing of actions taken and the state at time
   // With interpolations while moving or after ending
-  def interpolatedStates: List[(NetworkStateAtTime, Option[Action])] =
+  val interpolatedStates: List[(NetworkStateAtTime, Option[Action])] =
   states
     // Zip with the action taken from this state
     .zip(actions.appended(Action.End))
@@ -215,7 +212,7 @@ case class NetworkSolution(st: NetworkStateAtTime, actions: List[Action]):
 class Solver(val network: Network):
   private def possibleActionsFromState(st: NetworkStateAtTime): List[Action] =
     // If we already hit the max time, nothing you can do but end
-    if st.time >= TIME_MAX then
+    if st.time >= network.maxTime then
       return List()
 
     // Optimisation, we should never move to a valve unless we intended to open it
@@ -273,25 +270,6 @@ class Solver(val network: Network):
 //    println(s"Best sol from here releases pressure ${res.totalPressureReleased}")
     res
 
-
-//    possibleActionsFromHere.flatMap { action =>
-//      // What is the next state if we take this action
-//      val nextState = st.act(action).getOrElse {
-//        throw Exception("Invalid action!")
-//      }
-//      if cache.contains(nextState) then
-//        println("returning cached value")
-//        cache(nextState).map(action :: _)
-//      else
-//        println("recursing")
-//        // What are the possibilities from there?
-//        val res = possibleSolutionsFrom(nextState, depth + 1, cache)
-//          // Start with that action
-//          .map(action :: _)
-//        cache(nextState) = res
-//        res
-//    }
-
   // Solve the network to find the best sequence of actions that can be taken
   // maximising flow integrated over t=0 to t=29
   def solve: NetworkSolution =
@@ -315,7 +293,7 @@ object Parsing:
       Valve(id, flowRate, neighbours.toSet)
 
   def inputParser: Parser[Network] =
-    CommonParsers.lineSeparated(valve).map(vs => Network(vs))
+    CommonParsers.lineSeparated(valve).map(vs => Network(vs, 29))
 
 
 object Testing:
@@ -363,7 +341,7 @@ object Testing:
       case Action.End => ""
 
   def printStateLog(sol: NetworkSolution): Unit =
-    // Add an extra Action.End to the action list since we don't take an action at t=TIME_MAX
+    // Add an extra Action.End to the action list since we don't take an action at t=maxTime
     for (s, a) <- sol.interpolatedStates do
       println(genTimeString(s.time))
       println(genNetworkStateString(s.state))
@@ -384,15 +362,15 @@ object Day16 extends SolutionWithParser[Network, Int, Int]:
   override def parser: Parser[Network] = Parsing.inputParser
 
   override def solvePart1(input: Network): Int =
-    // TESTING
-//    Testing.verifyTestSolution(input)
-
     Solver(input)
       .solve
       .totalPressureReleased
 
   override def solvePart2(input: Network): Int =
-    ???
+    // Hacky but accounting for the 4-minute training by just reducing maxTime here
+    Solver(input.copy(maxTime = 25))
+      .solve
+      .totalPressureReleased
 
 
 @main def run(): Unit = Day16.run()
