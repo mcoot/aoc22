@@ -17,7 +17,7 @@ case class Position(x: Int, y: Int):
 
   def manhattan(other: Position): Int = hdist(other) + vdist(other)
 
-  def tuningFrequency: Int = x * y
+  def tuningFrequency: Int = x * 4000000 + y
 
 
 extension (p: (Int, Int))
@@ -64,6 +64,20 @@ def findPositionsInRowWhichCannotHaveBeacons(sensors: List[Sensor], rowY: Int): 
   excluded.toSet
 
 
+def findPositionOfBeacon(sensors: List[Sensor], maxBound: Int): Position =
+  def isBlocked(p: Position) =
+    sensors.exists(s => p.manhattan(s.pos) <= s.distanceToNearest)
+  var t = System.nanoTime()
+  for y <- 0 to maxBound do
+    if y % 1 == 0 then
+      println(s"Starting row ${y} (prev: ${(System.nanoTime() - t)/1000000}ms)")
+    t = System.nanoTime()
+    for x <- 0 to maxBound do
+      if !isBlocked((x, y).pos) then
+        return (x, y).pos
+  throw Exception("Failed to find it!")
+
+
 object Day15 extends SolutionWithParser[List[Sensor], Int, Int]:
   override def dayNumber: Int = 15
 
@@ -88,10 +102,11 @@ object Day15 extends SolutionWithParser[List[Sensor], Int, Int]:
   override def parser: Parser[List[Sensor]] =
     CommonParsers.lineSeparated(sensorParser)
 
-  override def solvePart1(input: List[Sensor]): Int =
-    findPositionsInRowWhichCannotHaveBeacons(input, 2000000).size
+  override def solvePart1(input: List[Sensor]): Int = 0
+//    findPositionsInRowWhichCannotHaveBeacons(input, 2000000).size
 
-  override def solvePart2(input: List[Sensor]): Int = ???
+  override def solvePart2(input: List[Sensor]): Int =
+    findPositionOfBeacon(input, 4000000).tuningFrequency
 
 
 @main def run(): Unit = Day15.run()
