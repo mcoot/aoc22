@@ -9,7 +9,8 @@ case class Position(x: Int, y: Int):
   def pair: (Int, Int) = (x, y)
 
 
-case class RockPath(pathDefinition: List[Position])
+case class RockPath(path: List[Position]):
+  def segments: List[(Position, Position)] = path.zip(path.drop(1))
 
 
 object Day14 extends SolutionWithParser[List[RockPath], Int, Int]:
@@ -26,9 +27,11 @@ object Day14 extends SolutionWithParser[List[RockPath], Int, Int]:
   override def parser: Parser[List[RockPath]] =
     CommonParsers.lineSeparated(rockPathParser)
 
-  override def solvePart1(input: List[RockPath]): Int = ???
+  override def solvePart1(input: List[RockPath]): Int =
+    ???
 
-  override def solvePart2(input: List[RockPath]): Int = ???
+  override def solvePart2(input: List[RockPath]): Int =
+    ???
 
 
 @main def run(): Unit = Day14.run()
