@@ -1,8 +1,12 @@
 package aoc22.day14
 
+import scala.util.control.Breaks.*
+import scala.collection.mutable.Set as MutableSet
 import aoc22.common.{CommonParsers, SolutionWithParser}
 import aoc22.day14.CaveState.INITIAL_SAND_POSITION
 import cats.parse.Parser
+
+import scala.collection.mutable
 
 
 case class Position(x: Int, y: Int):
@@ -36,7 +40,7 @@ enum SandMove:
   case Blocked
 
 
-case class CaveState(paths: List[RockPath], sandAtRest: Set[Position], sandInMotion: Position):
+class CaveState(val paths: List[RockPath], val hasFloor: Boolean):
   val rocks: Set[Position] =
     paths.flatMap { path =>
       path.segments.flatMap(_.positions)
@@ -45,10 +49,40 @@ case class CaveState(paths: List[RockPath], sandAtRest: Set[Position], sandInMot
   // The bottom of the lowest rock - any sand which reaches this will fall forever
   val boundY: Int = rocks.map(_.y).max
 
-  def isEmpty(pos: Position): Boolean = !rocks.contains(pos) && !sandAtRest.contains(pos)
+  // Y value of the floor for part 2
+  val floorY: Int = boundY + 2
+
+  val sandAtRest: MutableSet[Position] = MutableSet.empty
+
+  var sandInMotion: Position = INITIAL_SAND_POSITION
+
+  var isTerminated = false
+
+  def xBounds: (Int, Int) =
+    val occupied = Set(rocks.map(_.x), sandAtRest.map(_.x)).flatten
+    (occupied.min, occupied.max)
+
+  def isEmpty(pos: Position): Boolean =
+    !rocks.contains(pos) && !sandAtRest.contains(pos) && (!hasFloor || pos.y < floorY)
+
+  def printState: String =
+    val (minX, maxX) = xBounds
+    val sb = mutable.StringBuilder()
+    for y <- 0 to floorY do
+      for x <- minX to maxX do
+        if rocks.contains((x, y).pos) || y >= floorY then
+          sb.append('#')
+        else if sandAtRest.contains((x, y).pos) then
+          sb.append('o')
+        else if sandInMotion == (x, y).pos then
+          sb.append('+')
+        else
+          sb.append('.')
+      sb.append('\n')
+    sb.mkString
 
   def genMove: SandMove = sandInMotion match
-    case Position(_, y) if y >= boundY => SandMove.FallingForever
+    case Position(_, y) if y >= boundY && !hasFloor => SandMove.FallingForever
     case Position(x, y) if isEmpty((x, y + 1).pos) => SandMove.Down
     case Position(x, y) if isEmpty((x - 1, y + 1).pos) => SandMove.DownLeft
     case Position(x, y) if isEmpty((x + 1, y + 1).pos) => SandMove.DownRight
@@ -63,27 +97,45 @@ case class CaveState(paths: List[RockPath], sandAtRest: Set[Position], sandInMot
       case SandMove.FallingForever => (x, y + 1).pos
       case SandMove.Blocked => (x, y).pos
 
-  def step: Option[CaveState] =
+  def step(): Unit =
+    if isTerminated then
+      return
+
     val move = genMove
     move match
-      case SandMove.FallingForever => None
-      case SandMove.Blocked => Some(copy(sandAtRest = sandAtRest + sandInMotion, sandInMotion = INITIAL_SAND_POSITION))
-      case _ => Some(copy(sandInMotion = nextPosForSandInMotion(move)))
+      // Falling forever into the void
+      case SandMove.FallingForever =>
+        // Sand falling into the void
+        isTerminated = true
+      case SandMove.Blocked =>
+        if isEmpty(INITIAL_SAND_POSITION) then
+          sandAtRest.addOne(sandInMotion)
+          sandInMotion = INITIAL_SAND_POSITION
+        else
+          // Cave filled up to the entry point
+          isTerminated = true
+      case _ =>
+        sandInMotion = nextPosForSandInMotion(move)
 
-
-  def simulateToFinish: CaveState =
-    Iterable.unfold((this, 0)) { case (state, idx) =>
-      if (idx + 1) % 1000 == 0 then
-        println(s"Step ${idx+1}")
-      state.step.map(s => (s, (s, idx + 1)))
+  def stepUntilNextGrain(): Unit =
+    breakable {
+      while !isTerminated do
+        val curAtRestSize = sandAtRest.size
+        step()
+        if sandAtRest.size > curAtRestSize then
+          break()
     }
-      .last
+
+  def simulateToFinish(): Unit =
+    var idx = 0
+    while !isTerminated do
+      stepUntilNextGrain()
+      idx += 1
+    println(printState)
 
 
 object CaveState:
   val INITIAL_SAND_POSITION: Position = Position(500, 0)
-
-  def initial(paths: List[RockPath]): CaveState = CaveState(paths, Set.empty, INITIAL_SAND_POSITION)
 
 
 object Day14 extends SolutionWithParser[List[RockPath], Int, Int]:
@@ -101,13 +153,14 @@ object Day14 extends SolutionWithParser[List[RockPath], Int, Int]:
     CommonParsers.lineSeparated(rockPathParser)
 
   override def solvePart1(input: List[RockPath]): Int =
-    CaveState.initial(input)
-      .simulateToFinish
-      .sandAtRest
-      .size
+    val cs = CaveState(input, false)
+    cs.simulateToFinish()
+    cs.sandAtRest.size
 
   override def solvePart2(input: List[RockPath]): Int =
-    ???
+    val cs = CaveState(input, true)
+    cs.simulateToFinish()
+    cs.sandAtRest.size
 
 
 @main def run(): Unit = Day14.run()
