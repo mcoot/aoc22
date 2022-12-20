@@ -4,6 +4,8 @@ import scala.collection.mutable.Set as MutableSet
 import aoc22.common.{CommonParsers, SolutionWithParser}
 import cats.parse.Parser
 
+import scala.annotation.targetName
+
 
 case class Position(x: Int, y: Int):
   def this(p: (Int, Int)) = this(p(0), p(1))
@@ -15,9 +17,17 @@ case class Position(x: Int, y: Int):
   def vdist(otherY: Int): Int = Math.abs(otherY - y)
   def vdist(other: Position): Int = vdist(other.y)
 
+  @targetName("add")
+  def +(other: Position): Position = Position(x + other.x, y + other.y)
+
+  def inBounds(minBound: Position, maxBound: Position): Boolean =
+    val Position(minX, minY) = minBound
+    val Position(maxX, maxY) = maxBound
+    x >= minX && x <= maxX && y >= minY && y <= maxY
+
   def manhattan(other: Position): Int = hdist(other) + vdist(other)
 
-  def tuningFrequency: Int = x * 4000000 + y
+  def tuningFrequency: Long = x.toLong * 4000000L + y.toLong
 
 
 extension (p: (Int, Int))
@@ -65,20 +75,25 @@ def findPositionsInRowWhichCannotHaveBeacons(sensors: List[Sensor], rowY: Int): 
 
 
 def findPositionOfBeacon(sensors: List[Sensor], maxBound: Int): Position =
-  def isBlocked(p: Position) =
+  def isBlocked(p: Position): Boolean =
     sensors.exists(s => p.manhattan(s.pos) <= s.distanceToNearest)
-  var t = System.nanoTime()
-  for y <- 0 to maxBound do
-    if y % 1 == 0 then
-      println(s"Starting row ${y} (prev: ${(System.nanoTime() - t)/1000000}ms)")
-    t = System.nanoTime()
-    for x <- 0 to maxBound do
-      if !isBlocked((x, y).pos) then
-        return (x, y).pos
-  throw Exception("Failed to find it!")
+
+  // For there to be precisely one beacon, it must be _just_ beyond the boundary
+  // of sensor ranges. So we can restrict the search to there
+  sensors.zipWithIndex.flatMap { case (s, idx) =>
+    println(s"Working on sensor ${idx+1}/${sensors.size}, radius ${s.distanceToNearest}")
+    for
+      x <- (-s.distanceToNearest - 1) to (s.distanceToNearest + 1)
+      yDir <- List(-1, 1)
+      y = yDir * (s.distanceToNearest + 1 - Math.abs(x))
+      p = s.pos + (x, y).pos
+      if !isBlocked(p) && p.inBounds((0, 0).pos, (maxBound, maxBound).pos)
+    yield
+      p
+  }.head
 
 
-object Day15 extends SolutionWithParser[List[Sensor], Int, Int]:
+object Day15 extends SolutionWithParser[List[Sensor], Long, Long]:
   override def dayNumber: Int = 15
 
   private def positionParser: Parser[Position] =
@@ -102,10 +117,10 @@ object Day15 extends SolutionWithParser[List[Sensor], Int, Int]:
   override def parser: Parser[List[Sensor]] =
     CommonParsers.lineSeparated(sensorParser)
 
-  override def solvePart1(input: List[Sensor]): Int = 0
+  override def solvePart1(input: List[Sensor]): Long = 0
 //    findPositionsInRowWhichCannotHaveBeacons(input, 2000000).size
 
-  override def solvePart2(input: List[Sensor]): Int =
+  override def solvePart2(input: List[Sensor]): Long =
     findPositionOfBeacon(input, 4000000).tuningFrequency
 
 
