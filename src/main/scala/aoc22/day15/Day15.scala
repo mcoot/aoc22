@@ -1,33 +1,36 @@
 package aoc22.day15
 
 import scala.collection.mutable.Set as MutableSet
-import aoc22.common.{CommonParsers, SolutionWithParser}
+import aoc22.common.{CommonParsers, SolutionWithParser, Point2D as Position}
 import cats.parse.Parser
 
 import scala.annotation.targetName
 
 
-case class Position(x: Int, y: Int):
-  def this(p: (Int, Int)) = this(p(0), p(1))
-  def pair: (Int, Int) = (x, y)
+//case class Position(x: Int, y: Int):
+//  def this(p: (Int, Int)) = this(p(0), p(1))
+//  def pair: (Int, Int) = (x, y)
+//
+//  def hdist(otherX: Int): Int = Math.abs(otherX - x)
+//  def hdist(other: Position): Int = hdist(other.x)
+//
+//  def vdist(otherY: Int): Int = Math.abs(otherY - y)
+//  def vdist(other: Position): Int = vdist(other.y)
+//
+//  @targetName("add")
+//  def +(other: Position): Position = Position(x + other.x, y + other.y)
+//
+//  def inBounds(minBound: Position, maxBound: Position): Boolean =
+//    val Position(minX, minY) = minBound
+//    val Position(maxX, maxY) = maxBound
+//    x >= minX && x <= maxX && y >= minY && y <= maxY
+//
+//  def manhattan(other: Position): Int = hdist(other) + vdist(other)
+//
+//
 
-  def hdist(otherX: Int): Int = Math.abs(otherX - x)
-  def hdist(other: Position): Int = hdist(other.x)
-
-  def vdist(otherY: Int): Int = Math.abs(otherY - y)
-  def vdist(other: Position): Int = vdist(other.y)
-
-  @targetName("add")
-  def +(other: Position): Position = Position(x + other.x, y + other.y)
-
-  def inBounds(minBound: Position, maxBound: Position): Boolean =
-    val Position(minX, minY) = minBound
-    val Position(maxX, maxY) = maxBound
-    x >= minX && x <= maxX && y >= minY && y <= maxY
-
-  def manhattan(other: Position): Int = hdist(other) + vdist(other)
-
-  def tuningFrequency: Long = x.toLong * 4000000L + y.toLong
+extension (p: Position)
+  def tuningFrequency: Long = p.x.toLong * 4000000L + p.y.toLong
 
 
 extension (p: (Int, Int))
