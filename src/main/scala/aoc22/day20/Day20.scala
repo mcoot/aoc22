@@ -1,5 +1,6 @@
 package aoc22.day20
 
+import scala.collection.mutable.ArrayBuffer
 import aoc22.common.{CommonParsers, SolutionWithParser}
 import cats.parse.Parser
 
@@ -11,13 +12,11 @@ case class Ring(elements: List[(Long, Int)]):
       .find(_(0)(1) == origIdx)
       .getOrElse(throw Exception("missing!"))
 
-    val withMarked = elements.patch(curIdx, Nil, 1)
+    val withoutElem = elements.patch(curIdx, Nil, 1)
 
-    val insertionPoint = Math.floorMod(curIdx + elem(0), withMarked.length).toInt
+    val insertionPoint = Math.floorMod(curIdx + elem(0), withoutElem.length).toInt
 
-    val withDuplicate = withMarked.take(insertionPoint) ++ List(elem) ++ withMarked.drop(insertionPoint)
-
-    val finalList = withDuplicate.filterNot(_(1) == -1)
+    val finalList = withoutElem.take(insertionPoint) ++ List(elem) ++ withoutElem.drop(insertionPoint)
 
     Ring(finalList)
 
@@ -33,7 +32,37 @@ case class Ring(elements: List[(Long, Int)]):
     val x = elements((zeroIdx + 1000) % elements.length)(0)
     val y = elements((zeroIdx + 2000) % elements.length)(0)
     val z = elements((zeroIdx + 3000) % elements.length)(0)
+    println((x, y, z))
     (x, y, z)
+
+
+// Attempted better reimplementation with mutability
+// It works for the test case but not the real input and I have NFI why
+class RingBuffer(val initialElements: List[Long]):
+
+  var elements: ArrayBuffer[Long] = ArrayBuffer.from(initialElements)
+
+  def mix(): Unit =
+    for v <- initialElements do
+      // Find where that value is now
+      val curIdx = elements.indexOf(v)
+      // Take what we are moving out
+      elements.remove(curIdx)
+      // Figure out where to insert it back
+      val insertionPoint = Math.floorMod(curIdx + v, elements.length).toInt
+      // Insert it at that spot
+      elements.insert(insertionPoint, v)
+
+
+  def coords: (Long, Long, Long) =
+    val zeroIdx = elements.indexWhere(_ == 0)
+    println(elements.slice(zeroIdx, zeroIdx + 3))
+    val x = elements((zeroIdx + 1000) % elements.length)
+    val y = elements((zeroIdx + 2000) % elements.length)
+    val z = elements((zeroIdx + 3000) % elements.length)
+    println((x, y, z))
+    (x, y, z)
+
 
 
 object Day20 extends SolutionWithParser[List[Long], Long, Long]:
@@ -43,11 +72,15 @@ object Day20 extends SolutionWithParser[List[Long], Long, Long]:
 
   override def solvePart1(input: List[Long]): Long =
     val res = Ring(input.zipWithIndex).mix
-
-//    println(s"Final ${res.elements.map(_(0)).mkString(", ")}")
     res.coords.productIterator.asInstanceOf[Iterator[Long]].sum
 
-  override def solvePart2(input: List[Long]): Long = ???
+  override def solvePart2(input: List[Long]): Long =
+    var res = Ring(input.map(_ * 811589153).zipWithIndex)
+
+    for _ <- 0 until 10 do
+      res = res.mix
+
+    res.coords.productIterator.asInstanceOf[Iterator[Long]].sum
 
 
 @main def run(): Unit = Day20.run()
