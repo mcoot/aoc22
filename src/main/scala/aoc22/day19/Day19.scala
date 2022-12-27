@@ -3,21 +3,26 @@ package aoc22.day19
 import aoc22.common.{CommonParsers, SolutionWithParser}
 import cats.parse.{Parser, Parser0}
 
-enum Resource:
-  case Ore(amount: Int)
-  case Clay(amount: Int)
-  case Obsidian(amount: Int)
-  case Geode(amount: Int)
 
+sealed trait Resource[A <: Resource[A]](val amount: Int) extends Ordered[A]:
+  override def compare(that: A): Int = amount compare that.amount
 
-case class RobotCosts(ore: Resource.Ore,
-                      clay: Resource.Ore,
-                      obsidian: (Resource.Ore, Resource.Clay),
-                      geode: (Resource.Ore, Resource.Obsidian))
+case class Ore(override val amount: Int) extends Resource[Ore](amount)
 
+case class Clay(override val amount: Int) extends Resource[Clay](amount)
+
+case class Obsidian(override val amount: Int) extends Resource[Obsidian](amount)
+
+case class Geode(override val amount: Int) extends Resource[Geode](amount)
+
+case class RobotCosts(oreRobotCost: Ore,
+                      clayRobotCost: Ore,
+                      obsidianRobotCost: (Ore, Clay),
+                      geodeRobotCost: (Ore, Obsidian))
 
 
 case class Blueprint(id: Int, costs: RobotCosts)
+
 
 object Day19 extends SolutionWithParser[List[Blueprint], Int, Int]:
   override def dayNumber: Int = 19
@@ -34,14 +39,14 @@ object Day19 extends SolutionWithParser[List[Blueprint], Int, Int]:
       yield
         id
 
-    def oreParser: Parser[Resource.Ore] =
-      (CommonParsers.int <* Parser.string(" ore")).map(Resource.Ore.apply)
+    def oreParser: Parser[Ore] =
+      (CommonParsers.int <* Parser.string(" ore")).map(Ore.apply)
 
-    def clayParser: Parser[Resource.Clay] =
-      (CommonParsers.int <* Parser.string(" clay")).map(Resource.Clay.apply)
+    def clayParser: Parser[Clay] =
+      (CommonParsers.int <* Parser.string(" clay")).map(Clay.apply)
 
-    def obsidianParser: Parser[Resource.Obsidian] =
-      (CommonParsers.int <* Parser.string(" obsidian")).map(Resource.Obsidian.apply)
+    def obsidianParser: Parser[Obsidian] =
+      (CommonParsers.int <* Parser.string(" obsidian")).map(Obsidian.apply)
 
     def robotCostsParser: Parser[RobotCosts] =
       for
