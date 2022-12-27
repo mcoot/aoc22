@@ -9,7 +9,7 @@ import scala.collection.mutable
 import scala.collection.mutable.Map as MutableMap
 
 
-val TIME_MAX = 23
+val TIME_MAX = 24
 
 
 enum ResourceKind:
@@ -135,7 +135,7 @@ class Solver(val blueprint: Blueprint):
 
     while statesToVisit.nonEmpty do
       totalIters += 1
-      if totalIters % 1000000 == 0 then
+      if totalIters % 10000000 == 0 then
         println(s"Iteration ${totalIters}")
 
       val state = statesToVisit.dequeue()
@@ -158,9 +158,9 @@ class Solver(val blueprint: Blueprint):
 
         if state.resources.geode > mostGeodesAtCurrentTime then
           mostGeodesAtCurrentTime = state.resources.geode
-//        else if state.resources.geode < mostGeodesAtCurrentTime then
-//          // Behind the 8-ball, give up lol
-//          break()
+        else if state.resources.geode < mostGeodesAtCurrentTime then
+          // Behind the 8-ball, give up lol
+          break()
 
         // Robots we could build
         val couldBuild = state.robots.buildableRobots(state.resources)
@@ -170,7 +170,7 @@ class Solver(val blueprint: Blueprint):
         else
         // Consider doing nothing and just building resources
           step(state, None) :: couldBuild.map(k => step(state, Some(k)))
-        nextStates.foreach(statesToVisit.enqueue)
+        nextStates.filter(_.resources.geode >= mostGeodesAtCurrentTime).foreach(statesToVisit.enqueue)
       }
 
     bestTerminalState.getOrElse(throw Exception("Failed to find any terminal states")).resources.geode
