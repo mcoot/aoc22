@@ -8,72 +8,48 @@ import scala.annotation.targetName
 
 val TIME_MAX = 24
 
-sealed trait Resource[A <: Resource[A]](val amount: Int) extends Ordered[A]:
-  override def compare(that: A): Int = amount compare that.amount
 
-  @targetName("add")
-  def +(other: A): A
-
-  @targetName("subtract")
-  def -(other: A): A
-
-case class Ore(override val amount: Int) extends Resource[Ore](amount):
-  @targetName("add")
-  override def +(other: Ore): Ore = Ore(amount - other.amount)
-  @targetName("subtract")
-  override def -(other: Ore): Ore = Ore(amount - other.amount)
-
-case class Clay(override val amount: Int) extends Resource[Clay](amount):
-  @targetName("add")
-  override def +(other: Clay): Clay = Clay(amount - other.amount)
-
-  @targetName("subtract")
-  override def -(other: Clay): Clay = Clay(amount - other.amount)
-
-case class Obsidian(override val amount: Int) extends Resource[Obsidian](amount):
-  @targetName("add")
-  override def +(other: Obsidian): Obsidian = Obsidian(amount - other.amount)
-
-  @targetName("subtract")
-  override def -(other: Obsidian): Obsidian = Obsidian(amount - other.amount)
-
-case class Geode(override val amount: Int) extends Resource[Geode](amount):
-  @targetName("add")
-  override def +(other: Geode): Geode = Geode(amount - other.amount)
-
-  @targetName("subtract")
-  override def -(other: Geode): Geode = Geode(amount - other.amount)
+enum ResourceKind:
+  case Ore
+  case Clay
+  case Obsidian
+  case Geode
 
 
-// Extension to allow easier construction of resource units
-extension (i: Int)
-  def ore: Ore = Ore(i)
-  def clay: Clay = Clay(i)
-  def obsidian: Obsidian = Obsidian(i)
-  def geode: Geode = Geode(i)
-
-
-case class Resources(ore: Ore, clay: Clay, obsidian: Obsidian, geode: Geode)
+case class Resources(ore: Int, clay: Int, obsidian: Int, geode: Int)
 
 object Resources:
-  val initial: Resources = Resources(0.ore, 0.clay, 0.obsidian, 0.geode)
+  val initial: Resources = Resources(0, 0, 0, 0)
 
 
-sealed trait RobotTemplate[A <: Resource[A]](val producesPerMinute: Resource[A])
+sealed trait RobotTemplate(val produces: ResourceKind, val productionPerMinute: Int):
+  def canProduce(resources: Resources): Boolean
 
-case class OreRobot(oreCost: Ore) extends RobotTemplate(Ore(1))
+case class OreRobot(oreCost: Int) extends RobotTemplate(ResourceKind.Ore, 1):
+  override def canProduce(resources: Resources): Boolean = oreCost <= resources.ore
 
-case class ClayRobot(oreCost: Ore) extends RobotTemplate(Clay(1))
+case class ClayRobot(oreCost: Int) extends RobotTemplate(ResourceKind.Clay, 1):
+  override def canProduce(resources: Resources): Boolean = oreCost <= resources.ore
 
-case class ObsidianRobot(oreCost: Ore, clayCost: Clay) extends RobotTemplate(Obsidian(1))
+case class ObsidianRobot(oreCost: Int, clayCost: Int) extends RobotTemplate(ResourceKind.Obsidian, 1):
+  override def canProduce(resources: Resources): Boolean = oreCost <= resources.ore && clayCost <= resources.clay
 
-case class GeodeRobot(oreCost: Ore, obsidianCost: Obsidian) extends RobotTemplate(Geode(1))
+case class GeodeRobot(oreCost: Int, obsidianCost: Int) extends RobotTemplate(ResourceKind.Geode, 1):
+  override def canProduce(resources: Resources): Boolean =
+    oreCost <= resources.ore && obsidianCost <= resources.obsidian
 
 
 case class RobotTemplates(ore: OreRobot,
                           clay: ClayRobot,
                           obsidian: ObsidianRobot,
-                          geode: GeodeRobot)
+                          geode: GeodeRobot):
+  val kindToTemplate: Map[ResourceKind, RobotTemplate] =
+    List(
+      (ResourceKind.Ore, ore),
+      (ResourceKind.Clay, clay),
+      (ResourceKind.Obsidian, obsidian),
+      (ResourceKind.Geode, geode)
+    ).toMap
 
 
 case class Blueprint(id: Int, templates: RobotTemplates)
@@ -99,14 +75,14 @@ object Day19 extends SolutionWithParser[List[Blueprint], Int, Int]:
       yield
         id
 
-    def oreParser: Parser[Ore] =
-      (CommonParsers.int <* Parser.string(" ore")).map(Ore.apply)
+    def oreParser: Parser[Int] =
+      (CommonParsers.int <* Parser.string(" ore"))
 
-    def clayParser: Parser[Clay] =
-      (CommonParsers.int <* Parser.string(" clay")).map(Clay.apply)
+    def clayParser: Parser[Int] =
+      (CommonParsers.int <* Parser.string(" clay"))
 
-    def obsidianParser: Parser[Obsidian] =
-      (CommonParsers.int <* Parser.string(" obsidian")).map(Obsidian.apply)
+    def obsidianParser: Parser[Int] =
+      (CommonParsers.int <* Parser.string(" obsidian"))
 
     def robotTemplatesParser: Parser[RobotTemplates] =
       for
