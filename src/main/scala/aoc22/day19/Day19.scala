@@ -3,25 +3,85 @@ package aoc22.day19
 import aoc22.common.{CommonParsers, SolutionWithParser}
 import cats.parse.{Parser, Parser0}
 
+import scala.annotation.targetName
+
+
+val TIME_MAX = 24
 
 sealed trait Resource[A <: Resource[A]](val amount: Int) extends Ordered[A]:
   override def compare(that: A): Int = amount compare that.amount
 
-case class Ore(override val amount: Int) extends Resource[Ore](amount)
+  @targetName("add")
+  def +(other: A): A
 
-case class Clay(override val amount: Int) extends Resource[Clay](amount)
+  @targetName("subtract")
+  def -(other: A): A
 
-case class Obsidian(override val amount: Int) extends Resource[Obsidian](amount)
+case class Ore(override val amount: Int) extends Resource[Ore](amount):
+  @targetName("add")
+  override def +(other: Ore): Ore = Ore(amount - other.amount)
+  @targetName("subtract")
+  override def -(other: Ore): Ore = Ore(amount - other.amount)
 
-case class Geode(override val amount: Int) extends Resource[Geode](amount)
+case class Clay(override val amount: Int) extends Resource[Clay](amount):
+  @targetName("add")
+  override def +(other: Clay): Clay = Clay(amount - other.amount)
 
-case class RobotCosts(oreRobotCost: Ore,
-                      clayRobotCost: Ore,
-                      obsidianRobotCost: (Ore, Clay),
-                      geodeRobotCost: (Ore, Obsidian))
+  @targetName("subtract")
+  override def -(other: Clay): Clay = Clay(amount - other.amount)
+
+case class Obsidian(override val amount: Int) extends Resource[Obsidian](amount):
+  @targetName("add")
+  override def +(other: Obsidian): Obsidian = Obsidian(amount - other.amount)
+
+  @targetName("subtract")
+  override def -(other: Obsidian): Obsidian = Obsidian(amount - other.amount)
+
+case class Geode(override val amount: Int) extends Resource[Geode](amount):
+  @targetName("add")
+  override def +(other: Geode): Geode = Geode(amount - other.amount)
+
+  @targetName("subtract")
+  override def -(other: Geode): Geode = Geode(amount - other.amount)
 
 
-case class Blueprint(id: Int, costs: RobotCosts)
+// Extension to allow easier construction of resource units
+extension (i: Int)
+  def ore: Ore = Ore(i)
+  def clay: Clay = Clay(i)
+  def obsidian: Obsidian = Obsidian(i)
+  def geode: Geode = Geode(i)
+
+
+case class Resources(ore: Ore, clay: Clay, obsidian: Obsidian, geode: Geode)
+
+object Resources:
+  val initial: Resources = Resources(0.ore, 0.clay, 0.obsidian, 0.geode)
+
+
+sealed trait RobotTemplate[A <: Resource[A]](val producesPerMinute: Resource[A])
+
+case class OreRobot(oreCost: Ore) extends RobotTemplate(Ore(1))
+
+case class ClayRobot(oreCost: Ore) extends RobotTemplate(Clay(1))
+
+case class ObsidianRobot(oreCost: Ore, clayCost: Clay) extends RobotTemplate(Obsidian(1))
+
+case class GeodeRobot(oreCost: Ore, obsidianCost: Obsidian) extends RobotTemplate(Geode(1))
+
+
+case class RobotTemplates(ore: OreRobot,
+                          clay: ClayRobot,
+                          obsidian: ObsidianRobot,
+                          geode: GeodeRobot)
+
+
+case class Blueprint(id: Int, templates: RobotTemplates)
+
+
+case class Robots(ore: Int, clay: Int, obsidian: Int, geode: Int)
+
+case class State(blueprint: Blueprint, robots: Robots, resources: Resources)
 
 
 object Day19 extends SolutionWithParser[List[Blueprint], Int, Int]:
@@ -48,7 +108,7 @@ object Day19 extends SolutionWithParser[List[Blueprint], Int, Int]:
     def obsidianParser: Parser[Obsidian] =
       (CommonParsers.int <* Parser.string(" obsidian")).map(Obsidian.apply)
 
-    def robotCostsParser: Parser[RobotCosts] =
+    def robotTemplatesParser: Parser[RobotTemplates] =
       for
         _ <- Parser.string("Each ore robot costs ")
         oreRobotCost <- oreParser
@@ -67,15 +127,15 @@ object Day19 extends SolutionWithParser[List[Blueprint], Int, Int]:
         geodeRobotObsidianCost <- obsidianParser
         _ <- Parser.string(".")
       yield
-        RobotCosts(oreRobotCost,
-          clayRobotCost,
-          (obsidianRobotOreCost, obsidianRobotClayCost),
-          (geodeRobotOreCost, geodeRobotObsidianCost))
+        RobotTemplates(OreRobot(oreRobotCost),
+          ClayRobot(clayRobotCost),
+          ObsidianRobot(obsidianRobotOreCost, obsidianRobotClayCost),
+          GeodeRobot(geodeRobotOreCost, geodeRobotObsidianCost))
 
     def blueprintParser: Parser[Blueprint] =
       for
         id <- blueprintIdParser <* lineEndingParser
-        costs <- robotCostsParser
+        costs <- robotTemplatesParser
       yield
         Blueprint(id, costs)
 
