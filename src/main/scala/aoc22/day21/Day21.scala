@@ -7,6 +7,8 @@ import aoc22.common.{CommonParsers, SolutionWithParser}
 import cats.parse.Parser
 
 
+// Yes I know this should have been a sealed trait with differing behaviour
+// for binary ops, it's too late now
 enum Expression:
   case Literal(value: Long)
   // (We only have a single variable)
@@ -28,6 +30,17 @@ enum Expression:
       case Expression.Div(l, r) => (l, r)
       case Expression.Equals(l, r) => (l, r)
       case _ => throw Exception("Cannot get operands for non-binary op")
+
+  def containsVariable: Boolean =
+    this match
+      case Expression.Literal(_) => false
+      case Expression.Variable => true
+      case Expression.Reference(_) => throw Exception("Cannot follow reference")
+      case Expression.Add(l, r) => l.containsVariable || r.containsVariable
+      case Expression.Mult(l, r) => l.containsVariable || r.containsVariable
+      case Expression.Minus(l, r) => l.containsVariable || r.containsVariable
+      case Expression.Div(l, r) => l.containsVariable || r.containsVariable
+      case Expression.Equals(l, r) => l.containsVariable || r.containsVariable
 
   def expand(refMap: Map[String, Expression]): Expression =
     this match
@@ -58,9 +71,65 @@ enum Expression:
       case Expression.Div(l, r) => l.eval / r.eval
       case Expression.Equals(_, _) => throw Exception("Equals found in eval")
 
-  def rearrangeForVar: Expression.Equals =
+
+  // Build a new equals expr, conventionally leaving the variable on the left
+  // We already know we don't just have the literal var as one side here (handled in calling func)
+  // and since it has a var it can't be a literal (or ref, those should be expanded already)
+  // So the left side must be a binary op
+  // We want to invert that op and move it to the right
+  def rearrangeStep(sideWithVar: Expression, sideWithoutVar: Expression): Expression.Equals =
+    // e.g. for 2 / x = 2 * 5
+    // sideWithVar = 2 / x
+    // sideWithoutVar = 2 * 5
+    // l = 2
+    // r = x
+    sideWithVar match
+      // Addition x + 2 = 2 * 5 => x = (2 * 5) - 2
+      case Expression.Add(l, r) if l.containsVariable =>
+        Expression.Equals(l, Expression.Minus(sideWithoutVar, r))
+      // (Commutative, as above)
+      case Expression.Add(l, r) if r.containsVariable =>
+        Expression.Equals(r, Expression.Minus(sideWithoutVar, l))
+      // Multiplication x * 2 = 2 * 5 => x = (2 * 5) / 2
+      case Expression.Mult(l, r) if l.containsVariable =>
+        Expression.Equals(l, Expression.Div(sideWithoutVar, r))
+      // (Commutative, as above)
+      case Expression.Mult(l, r) if r.containsVariable =>
+        Expression.Equals(r, Expression.Div(sideWithoutVar, l))
+      // Subtraction, e.g. x - 2 = 2 * 5 => x = (2 * 5) + 2
+      case Expression.Minus(l, r) if l.containsVariable =>
+        Expression.Equals(l, Expression.Add(sideWithoutVar, r))
+      // Subtraction, e.g. 2 - x = 2 * 5 => x = 2 - 2 * 5
+      case Expression.Minus(l, r) if r.containsVariable =>
+        Expression.Equals(r, Expression.Minus(l, sideWithoutVar))
+      // Division, e.g. x / 2 = 2 * 5 => x = (2 * 5) * 2
+      case Expression.Div(l, r) if l.containsVariable =>
+        Expression.Equals(l, Expression.Mult(sideWithoutVar, r))
+      // Division, e.g. 2 / x = 2 * 5 => x = 2 / (2 * 5)
+      case Expression.Div(l, r) if r.containsVariable =>
+        Expression.Equals(r, Expression.Div(l, sideWithoutVar))
+      case _ => throw Exception("Invalid rearrangement")
+
+  // Rearrange an equals expr containing a variable such that it is of the form
+  // x = <expr>
+  def rearrangeForVar: Expression =
     this match
-      case Expression.Equals(l, r) => ???
+      // We can only rearrange Equals expressions
+      // If a subtree is just the variable, we've found it
+      case Expression.Equals(Expression.Variable, r) => r
+      case Expression.Equals(l, Expression.Variable) => l
+      // Recursive case
+      case Expression.Equals(l, r) =>
+        // One branch SHOULD contain variables
+        val next =
+          if l.containsVariable then
+            rearrangeStep(l, r)
+          else if r.containsVariable then
+            rearrangeStep(r, l)
+          else
+            throw Exception("No variable found")
+        // Recurse
+        next.rearrangeForVar
       case _ => throw Exception("Attempted to re-arrange non-equals")
 
 case class Monkey(name: String, op: Expression)
@@ -143,6 +212,7 @@ object Day21 extends SolutionWithParser[List[Monkey], Long, Long]:
     val expanded = MonkeyGraph(input).expand
     expanded("root").eval
 
+  // WRONG 11049074315968, too high
   override def solvePart2(input: List[Monkey]): Long =
     val adaptedInput = input.map {
       _ match
@@ -155,7 +225,7 @@ object Day21 extends SolutionWithParser[List[Monkey], Long, Long]:
     }
     val expanded = MonkeyGraph(adaptedInput).expand
     val rearranged = expanded("root").rearrangeForVar
-    rearranged.right.eval
+    rearranged.eval
 
 
 @main def run(): Unit = Day21.run()
