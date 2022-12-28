@@ -9,16 +9,32 @@ import cats.parse.Parser
 
 enum Expression:
   case Literal(value: Long)
+  // (We only have a single variable)
+  case Variable
   case Reference(name: String)
   case Add(left: Expression, right: Expression)
   case Mult(left: Expression, right: Expression)
   case Minus(left: Expression, right: Expression)
   case Div(left: Expression, right: Expression)
+  case Equals(left: Expression, right: Expression)
+
+  // Throws if not a binary op,
+  // returns the operands
+  def binaryOperands: (Expression, Expression) =
+    this match
+      case Expression.Add(l, r) => (l, r)
+      case Expression.Mult(l, r) => (l, r)
+      case Expression.Minus(l, r) => (l, r)
+      case Expression.Div(l, r) => (l, r)
+      case Expression.Equals(l, r) => (l, r)
+      case _ => throw Exception("Cannot get operands for non-binary op")
 
   def expand(refMap: Map[String, Expression]): Expression =
     this match
       // Nothing to expand for literals
       case Expression.Literal(_) => this
+      // Nothing to expand for the variable either
+      case Expression.Variable => this
       // Expand references directly
       case Expression.Reference(r) => refMap.getOrElse(r, throw Exception("Missing reference"))
       // Expand binary ops
@@ -26,17 +42,26 @@ enum Expression:
       case Expression.Mult(l, r) => Expression.Mult(l.expand(refMap), r.expand(refMap))
       case Expression.Minus(l, r) => Expression.Minus(l.expand(refMap), r.expand(refMap))
       case Expression.Div(l, r) => Expression.Div(l.expand(refMap), r.expand(refMap))
+      case Expression.Equals(l, r) => Expression.Equals(l.expand(refMap), r.expand(refMap))
 
   // Evaluate only implemented after expansion since we have to expand for part 2 anyway
+  // For part 2 we should have re-arranged our expression before eval'ing
+  // So there shouldn't be variables or equals operators
   def eval: Long =
     this match
       case Expression.Literal(v) => v
+      case Expression.Variable => throw Exception("Encountered variable while evaluating")
       case Expression.Reference(r) => throw Exception("Unexpanded reference found")
       case Expression.Add(l, r) => l.eval + r.eval
       case Expression.Mult(l, r) => l.eval * r.eval
       case Expression.Minus(l, r) => l.eval - r.eval
       case Expression.Div(l, r) => l.eval / r.eval
+      case Expression.Equals(_, _) => throw Exception("Equals found in eval")
 
+  def rearrangeForVar: Expression.Equals =
+    this match
+      case Expression.Equals(l, r) => ???
+      case _ => throw Exception("Attempted to re-arrange non-equals")
 
 case class Monkey(name: String, op: Expression)
 
@@ -51,6 +76,7 @@ case class MonkeyGraph(monkeyList: List[Monkey]):
       case Expression.Mult(Expression.Reference(l), Expression.Reference(r)) => List((m.name, l), (m.name, r))
       case Expression.Minus(Expression.Reference(l), Expression.Reference(r)) => List((m.name, l), (m.name, r))
       case Expression.Div(Expression.Reference(l), Expression.Reference(r)) => List((m.name, l), (m.name, r))
+      case Expression.Equals(Expression.Reference(l), Expression.Reference(r)) => List((m.name, l), (m.name, r))
       case Expression.Reference(r) => List((m.name, r))
       case _ => List()
   }.toSet
@@ -117,7 +143,19 @@ object Day21 extends SolutionWithParser[List[Monkey], Long, Long]:
     val expanded = MonkeyGraph(input).expand
     expanded("root").eval
 
-  override def solvePart2(input: List[Monkey]): Long = ???
+  override def solvePart2(input: List[Monkey]): Long =
+    val adaptedInput = input.map {
+      _ match
+        case m if m.name == "humn" =>
+          Monkey(m.name, Expression.Variable)
+        case m if m.name == "root" =>
+          val (l, r) = m.op.binaryOperands
+          Monkey(m.name, Expression.Equals(l, r))
+        case m => m
+    }
+    val expanded = MonkeyGraph(adaptedInput).expand
+    val rearranged = expanded("root").rearrangeForVar
+    rearranged.right.eval
 
 
 @main def run(): Unit = Day21.run()
