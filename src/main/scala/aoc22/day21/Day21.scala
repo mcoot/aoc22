@@ -7,31 +7,35 @@ import aoc22.common.{CommonParsers, SolutionWithParser}
 import cats.parse.Parser
 
 
-enum Value:
+enum Expression:
   case Literal(value: Long)
   case Reference(name: String)
+  case Add(left: Expression, right: Expression)
+  case Mult(left: Expression, right: Expression)
+  case Minus(left: Expression, right: Expression)
+  case Div(left: Expression, right: Expression)
 
-  def resolve(refMap: Map[String, Long]): Long =
+  def expand(refMap: Map[String, Expression]): Expression =
     this match
-      case Value.Literal(v) => v
-      case Value.Reference(ref) => refMap.getOrElse(ref, throw Exception("Reference not in map"))
+      // Nothing to expand for literals
+      case Expression.Literal(_) => this
+      // Expand references directly
+      case Expression.Reference(r) => refMap.getOrElse(r, throw Exception("Missing reference"))
+      // Expand binary ops
+      case Expression.Add(l, r) => Expression.Add(l.expand(refMap), r.expand(refMap))
+      case Expression.Mult(l, r) => Expression.Mult(l.expand(refMap), r.expand(refMap))
+      case Expression.Minus(l, r) => Expression.Minus(l.expand(refMap), r.expand(refMap))
+      case Expression.Div(l, r) => Expression.Div(l.expand(refMap), r.expand(refMap))
 
-
-enum Expression:
-  case Literal(value: Value)
-  case Add(left: Value, right: Value)
-  case Mult(left: Value, right: Value)
-  case Minus(left: Value, right: Value)
-  case Div(left: Value, right: Value)
-
-  def apply(refMap: Map[String, Long]): Long =
+  // Evaluate only implemented after expansion since we have to expand for part 2 anyway
+  def eval: Long =
     this match
-      case Expression.Literal(v) => v.resolve(refMap)
-      case Expression.Add(l, r) => l.resolve(refMap) + r.resolve(refMap)
-      case Expression.Mult(l, r) => l.resolve(refMap) * r.resolve(refMap)
-      case Expression.Minus(l, r) => l.resolve(refMap) - r.resolve(refMap)
-      case Expression.Div(l, r) => l.resolve(refMap) / r.resolve(refMap)
-      case _ => throw Exception("Invalid application")
+      case Expression.Literal(v) => v
+      case Expression.Reference(r) => throw Exception("Unexpanded reference found")
+      case Expression.Add(l, r) => l.eval + r.eval
+      case Expression.Mult(l, r) => l.eval * r.eval
+      case Expression.Minus(l, r) => l.eval - r.eval
+      case Expression.Div(l, r) => l.eval / r.eval
 
 
 case class Monkey(name: String, op: Expression)
@@ -41,31 +45,33 @@ case class MonkeyGraph(monkeyList: List[Monkey]):
   val vertices: Map[String, Monkey] = Map.from(monkeyList.map(m => (m.name, m)))
 
   val edges: Set[(String, String)] = monkeyList.flatMap { m =>
+    // Relying on our input set not having nesting etc.
     m.op match
-      case Expression.Add(Value.Reference(l), Value.Reference(r)) => List((m.name, l), (m.name, r))
-      case Expression.Mult(Value.Reference(l), Value.Reference(r)) => List((m.name, l), (m.name, r))
-      case Expression.Minus(Value.Reference(l), Value.Reference(r)) => List((m.name, l), (m.name, r))
-      case Expression.Div(Value.Reference(l), Value.Reference(r)) => List((m.name, l), (m.name, r))
+      case Expression.Add(Expression.Reference(l), Expression.Reference(r)) => List((m.name, l), (m.name, r))
+      case Expression.Mult(Expression.Reference(l), Expression.Reference(r)) => List((m.name, l), (m.name, r))
+      case Expression.Minus(Expression.Reference(l), Expression.Reference(r)) => List((m.name, l), (m.name, r))
+      case Expression.Div(Expression.Reference(l), Expression.Reference(r)) => List((m.name, l), (m.name, r))
+      case Expression.Reference(r) => List((m.name, r))
       case _ => List()
   }.toSet
 
-  // Evaluate the monkeys to their final values, following references
-  def evaluate: Map[String, Long] =
-    // Topological sort, evaluating the monkeys as we go
+  // Expand out all expressions
+  def expand: Map[String, Expression] =
+    // Topological sort, expanding the monkeys as we go
 
     // We need to check each monkey
     val monkeysToSort: MutableSet[String] = MutableSet.from(vertices.keySet)
     // All edges/references start being unresolved
     val unresolvedEdges: MutableSet[(String, String)] = MutableSet.from(edges)
     // Result
-    val evaluatedMonkeys: MutableMap[String, Long] = MutableMap.empty
+    val evaluatedMonkeys: MutableMap[String, Expression] = MutableMap.empty
 
     while monkeysToSort.nonEmpty do
       // Find monkeys we haven't yet checked that have no dependencies
       val noDependencies = monkeysToSort -- unresolvedEdges.map(_._1)
-      // If they have no dependencies they can be evaluated and removed from our to-sort set
+      // If they have no dependencies they can be expanded and removed from our to-sort set
       evaluatedMonkeys.addAll(noDependencies.map { name =>
-        (name, vertices(name).op(evaluatedMonkeys.toMap))
+        (name, vertices(name).op.expand(evaluatedMonkeys.toMap))
       })
       monkeysToSort.subtractAll(noDependencies)
       // Resolve incoming edges for these monkeys
@@ -80,11 +86,11 @@ object Day21 extends SolutionWithParser[List[Monkey], Long, Long]:
   object Parsing:
     def name: Parser[String] = Parser.charIn('a' to 'z').rep.map(l => l.toList.mkString)
 
-    def literal: Parser[Value.Literal] = CommonParsers.int.map(Value.Literal(_))
+    def literal: Parser[Expression.Literal] = CommonParsers.int.map(Expression.Literal(_))
 
-    def reference: Parser[Value.Reference] = name.map(Value.Reference(_))
+    def reference: Parser[Expression.Reference] = name.map(Expression.Reference(_))
 
-    def binaryOperation: Parser[(Value, Value, Char)] =
+    def binaryOperation: Parser[(Expression, Expression, Char)] =
       for
         l <- reference
         op <- (CommonParsers.spaces *> Parser.charIn(List('+', '-', '*', '/'))) <* CommonParsers.spaces
@@ -92,13 +98,14 @@ object Day21 extends SolutionWithParser[List[Monkey], Long, Long]:
       yield
         (l, r, op)
 
+    // We don't have pure reference expressions which helps here
     def expr: Parser[Expression] =
       binaryOperation.map { (l, r, op) => op match
         case '+' => Expression.Add(l, r)
         case '*' => Expression.Mult(l, r)
         case '-' => Expression.Minus(l, r)
         case '/' => Expression.Div(l, r)
-      } | literal.map(Expression.Literal(_))
+      } | literal
 
     def monkey: Parser[Monkey] =
       CommonParsers.pair(name, expr, Parser.string(": ")).map((n, e) => Monkey(n, e))
@@ -107,8 +114,8 @@ object Day21 extends SolutionWithParser[List[Monkey], Long, Long]:
     CommonParsers.lineSeparated(Parsing.monkey)
 
   override def solvePart1(input: List[Monkey]): Long =
-    val evaled = MonkeyGraph(input).evaluate
-    evaled("root")
+    val expanded = MonkeyGraph(input).expand
+    expanded("root").eval
 
   override def solvePart2(input: List[Monkey]): Long = ???
 
