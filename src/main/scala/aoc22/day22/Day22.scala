@@ -1,7 +1,12 @@
 package aoc22.day22
 
-import aoc22.common.{CommonParsers, SolutionWithParser}
+import aoc22.common.{CommonParsers, Point2D, pos, SolutionWithParser}
 import cats.parse.Parser
+
+
+enum TurnDirection:
+  case L
+  case R
 
 
 enum Direction:
@@ -10,10 +15,29 @@ enum Direction:
   case Up
   case Down
 
+  def flip: Direction = this match
+    case Direction.Left => Direction.Right
+    case Direction.Right => Direction.Left
+    case Direction.Up => Direction.Down
+    case Direction.Down => Direction.Up
 
-enum TurnDirection:
-  case L
-  case R
+  def turn(td: TurnDirection): Direction = (this, td) match
+    // counter-clockwise
+    case (Direction.Left, TurnDirection.L) => Direction.Down
+    case (Direction.Down, TurnDirection.L) => Direction.Right
+    case (Direction.Right, TurnDirection.L) => Direction.Up
+    case (Direction.Up, TurnDirection.L) => Direction.Left
+    // clockwise
+    case (Direction.Left, TurnDirection.R) => Direction.Up
+    case (Direction.Up, TurnDirection.R) => Direction.Right
+    case (Direction.Right, TurnDirection.R) => Direction.Down
+    case (Direction.Down, TurnDirection.R) => Direction.Left
+
+  def facingVal: Int = this match
+    case Direction.Right => 0
+    case Direction.Down => 1
+    case Direction.Left => 2
+    case Direction.Up => 3
 
 
 enum Instruction:
@@ -22,11 +46,25 @@ enum Instruction:
 
 
 // An individual rectangular plane
-case class Plane(id: Int, arr: Array[Array[Boolean]])
+case class Plane(id: Int, posInNet: Point2D, arr: Array[Array[Boolean]]):
+  def sideLength: Int = arr.length
+
+  def netPositionFor(posInPlane: Point2D): Point2D =
+    // Scale the position of this plane in the net by the side length, and add the pos within the plane
+    posInNet * sideLength + posInPlane
+
+  def maxBound: Point2D = (arr.head.length - 1, arr.length - 1).pos
 
 
 // Raw grid data as a a 2d grid of square segments
 case class RawGridData(arr: Array[Array[Option[Plane]]])
+
+
+// Describes where the player is by the plane they're on, position in the plane and cur direction
+case class PlayerPos(plane: Plane, pos: Point2D, dir: Direction):
+  def score: Long =
+    val netPos = plane.netPositionFor(pos)
+    (netPos.y + 1) * 1000 + (netPos.x + 1) * 4 + dir.facingVal
 
 
 // When moving across planes, a coordinate may change in one of several ways\
@@ -40,14 +78,28 @@ enum EdgeCoordTransition:
   // The coordinate could be swapped for the other coordinate
   case Swapped
 
+  def applyToCoordinate(coord: Int, otherCoord: Int, max: Int): Int = this match
+    case EdgeCoordTransition.ToZero => 0
+    case EdgeCoordTransition.ToMax => max
+    case EdgeCoordTransition.Maintained => coord
+    case EdgeCoordTransition.Swapped => otherCoord
+
 // Describes how the player's position is mapped when moving from one plane to another
 // Theory: the direction the player will be facing can be inferred from their existing direction
 // and the position translation
-case class EdgeTransition(x: EdgeCoordTransition, y: EdgeCoordTransition)
+// TODO: I NEED A CUBE
+case class EdgeTransition(x: EdgeCoordTransition, y: EdgeCoordTransition):
+  def applyToPos(pos: Point2D, maxBound: Point2D): Point2D =
+    (x.applyToCoordinate(pos.x, pos.y, maxBound.x), y.applyToCoordinate(pos.y, pos.x, maxBound.y)).pos
+
+  def applyToDirection(dir: Direction): Direction = (x, y) match
+    case (EdgeCoordTransition.Maintained, EdgeCoordTransition.ToZero) => dir
+    case _ => throw Exception("No direction mapping for edge transition")
 
 
 // Maps the player position from a given plane id to another
-case class EdgeMapping(fromPlane: Int, toPlane: Int, transition: EdgeTransition)
+case class EdgeMapping(fromPlane: Int, toPlane: Int, transition: EdgeTransition):
+  def apply(p: PlayerPos): PlayerPos = ???
 
 
 // A set of planes with information about how to map between them
@@ -112,12 +164,12 @@ object Day22 extends SolutionWithParser[(RawGridData, List[Instruction]), Long, 
 
         // Each square is either a real plane, or empty
         var nextPlaneId = -1
-        val arr = squares.map { squareRow =>
-          squareRow.map { square =>
+        val arr = squares.zipWithIndex.map { (squareRow, rowIdx) =>
+          squareRow.zipWithIndex.map { (square, colIdx) =>
             if isDefinedPlane(square) then
               // A plane
               nextPlaneId += 1
-              Some(Plane(nextPlaneId, square.map(row => row.map(_.get))))
+              Some(Plane(nextPlaneId, (colIdx, rowIdx).pos, square.map(row => row.map(_.get))))
             else if isEmptyPlane(square) then
               // An empty square
               None

@@ -18,6 +18,10 @@ case class Point2D(x: Int, y: Int):
   @targetName("add")
   def +(other: Point2D): Point2D = Point2D(x + other.x, y + other.y)
 
+  // Scalar multiplication
+  @targetName("mult")
+  def *(scalar: Int): Point2D = Point2D(x * scalar, y * scalar)
+
   // Distance calculations
   def hdist(otherX: Int): Int = Math.abs(otherX - x)
   def hdist(other: Point2D): Int = hdist(other.x)
