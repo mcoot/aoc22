@@ -108,41 +108,38 @@ enum CoordTransition:
   case ToMax
   // The coordinate could remain unchanged
   case Maintained
+  // The coordinate could be inverted (i.e. max - maintained)
+  case Inverted
   // The coordinate could be swapped for the other coordinate
   case Swapped
+  // The coordinate could be swapped and inverted (i.e. max - swapped)
+  case SwappedInverted
 
-  def applyToCoordinate(coord: Int, otherCoord: Int, max: Int): Int = this match
+  def applyToCoordinate(coord: Int, otherCoord: Int, maxThisCoord: Int, maxOtherCoord: Int): Int = this match
     case CoordTransition.ToZero => 0
-    case CoordTransition.ToMax => max
+    case CoordTransition.ToMax => maxThisCoord
     case CoordTransition.Maintained => coord
+    case CoordTransition.Inverted => maxThisCoord - coord
     case CoordTransition.Swapped => otherCoord
+    case CoordTransition.SwappedInverted => maxOtherCoord - otherCoord
 
 // Describes how the player's position is mapped when moving from one plane to another
-// Theory: the direction the player will be facing can be inferred from their existing direction
-// and the position translation
-// TODO: I NEED A CUBE
 case class EdgeTransition(toPlane: Plane, x: CoordTransition, y: CoordTransition, newDir: Direction):
   protected def applyToPos(pos: Point2D): Point2D =
-    (x.applyToCoordinate(pos.x, pos.y, toPlane.maxBound.x), y.applyToCoordinate(pos.y, pos.x, toPlane.maxBound.y)).pos
+    (
+      x.applyToCoordinate(pos.x, pos.y, toPlane.maxBound.x, toPlane.maxBound.y),
+      y.applyToCoordinate(pos.y, pos.x, toPlane.maxBound.y, toPlane.maxBound.x)
+    ).pos
 
   // Take one step over the edge...
   def apply(pos: PlayerPos): PlayerPos =
     PlayerPos(toPlane, applyToPos(pos.pos), newDir)
 
 
-//    (x, y, dir) match
-//      // top to front edge, x value maintained on the new plane, y becomes 0, direction remains down
-//      case (CoordTransition.Maintained, CoordTransition.ToZero, Direction.Down) => Direction.Down
-//      // top to back edge, x value maintained, y becomes max, direction remains up
-//      case (CoordTransition.Maintained, CoordTransition.ToMax, Direction.Up) => Direction.Up
-//      // top to right edge, x value becomes y from the prev plane, y becomes 0, direction becomes down
-//      case (CoordTransition.Swapped, CoordTransition.ToZero, Direction.Right) => Direction.Down
-//      // top to left edge, x value becomes y from the prev plane, y becomes 0, direction becomes down
-//      case (CoordTransition.Swapped, CoordTransition.ToZero, Direction.Left) => Direction.Down
-//      case _ => throw Exception("No direction mapping for edge transition")
+sealed trait GroveMap(val rawGrid: PlaneGrid):
+  // The final grid, after any re-orientation etc. of planes
+  val grid: PlaneGrid = rawGrid
 
-
-sealed trait GroveMap(val grid: PlaneGrid):
   def transitionFor(fromPlane: Plane, dir: Direction): EdgeTransition
 
   val initialPosition: PlayerPos = PlayerPos(grid.startingPlane, (0, 0).pos, Direction.Right)
@@ -190,7 +187,8 @@ sealed trait GroveMap(val grid: PlaneGrid):
 
 
 // Map is a flat surface with wrapping
-case class GroveMapPt1(override val grid: PlaneGrid) extends GroveMap(grid):
+// No change to the input grid is required
+class GroveMapPt1(override val grid: PlaneGrid) extends GroveMap(grid):
   // For part 1 we just need to consider wrapping transitions on a 2D plane
   override def transitionFor(fromPlane: Plane, dir: Direction): EdgeTransition =
     // Move along the direction, potentially wrapping
@@ -207,8 +205,127 @@ case class GroveMapPt1(override val grid: PlaneGrid) extends GroveMap(grid):
 
 
 // Map is a cube, with the grid representing a cube net
-case class GroveMapPt2(override val grid: PlaneGrid) extends GroveMap(grid):
-  override def transitionFor(fromPlane: Plane, dir: Direction): EdgeTransition = ???
+class GroveMapPt2(rawGrid: PlaneGrid, isTest: Boolean) extends GroveMap(rawGrid):
+  // We must choose a 'top' face and re-orient (rotate) other planes based on that
+  override val grid: PlaneGrid = rawGrid
+
+  private def planeFor(x: Int, y: Int) = grid((x, y).pos).get
+
+  private case class FaceMapping(top: Plane, front: Plane, bottom: Plane, back: Plane, left: Plane, right: Plane)
+
+  // Hardcoded transition mapping for the test input
+  // Treating the top row's only plane as the 'top' of the cube
+  private val testMapping: FaceMapping = FaceMapping(
+    top = planeFor(2, 0),
+    front = planeFor(2, 1),
+    bottom = planeFor(2, 2),
+    back = planeFor(0, 1),
+    left = planeFor(1, 1),
+    right = planeFor(3, 2)
+  )
+
+  // TODO: Hardcode or make generic
+  private def realInputMapping: FaceMapping = ???
+
+  private val faces: FaceMapping =
+    if isTest then
+      testMapping
+    else
+      realInputMapping
+
+  // Transition mappings defined by case
+  // TODO: Sadly specific to test mapping I think...
+  private val testTransitions: Map[(Plane, Direction), EdgeTransition] = Map(
+    // --- Rotation about x-axis counter-clockwise Top -> Front ---
+    // Top -> Front
+    (faces.top, Direction.Down) ->
+      EdgeTransition(faces.front, CoordTransition.Maintained, CoordTransition.ToZero, Direction.Down),
+    // Front -> Bottom
+    (faces.front, Direction.Down) ->
+      EdgeTransition(faces.bottom, CoordTransition.Maintained, CoordTransition.ToZero, Direction.Down),
+    // Bottom -> Back
+    (faces.bottom, Direction.Down) ->
+      EdgeTransition(faces.back, CoordTransition.Inverted, CoordTransition.ToMax, Direction.Up),
+    // Back -> Top
+    (faces.back, Direction.Up) ->
+      EdgeTransition(faces.top, CoordTransition.Inverted, CoordTransition.ToZero, Direction.Down),
+
+    // --- Rotation about x-axis clockwise Top -> Back ---
+    // Top -> Back
+    (faces.top, Direction.Up) ->
+      EdgeTransition(faces.back, CoordTransition.Inverted, CoordTransition.ToZero, Direction.Down),
+    // Back -> Bottom
+    (faces.back, Direction.Down) ->
+      EdgeTransition(faces.bottom, CoordTransition.Inverted, CoordTransition.ToMax, Direction.Up),
+    // Bottom -> Front
+    (faces.bottom, Direction.Up) ->
+      EdgeTransition(faces.front, CoordTransition.Maintained, CoordTransition.ToMax, Direction.Up),
+    // Front -> Top
+    (faces.front, Direction.Up) ->
+      EdgeTransition(faces.top, CoordTransition.Maintained, CoordTransition.ToMax, Direction.Up),
+
+    // --- Rotation about y-axis counter-clockwise Top -> Left ---
+    // Top -> Left
+    (faces.top, Direction.Left) ->
+      EdgeTransition(faces.left, CoordTransition.Swapped, CoordTransition.ToZero, Direction.Down),
+    // Left -> Bottom
+    (faces.left, Direction.Down) ->
+      EdgeTransition(faces.bottom, CoordTransition.ToZero, CoordTransition.SwappedInverted, Direction.Right),
+    // Bottom -> Right
+    (faces.bottom, Direction.Right) ->
+      EdgeTransition(faces.right, CoordTransition.ToZero, CoordTransition.Maintained, Direction.Right),
+    // Right -> Top
+    (faces.right, Direction.Right) ->
+      EdgeTransition(faces.top, CoordTransition.ToMax, CoordTransition.Inverted, Direction.Left),
+
+    // --- Rotation about y-axis clockwise Top -> Right ---
+    // Top -> Right
+    (faces.top, Direction.Right) ->
+      EdgeTransition(faces.right, CoordTransition.ToMax, CoordTransition.Inverted, Direction.Left),
+    // Right -> Bottom
+    (faces.right, Direction.Left) ->
+      EdgeTransition(faces.bottom, CoordTransition.ToMax, CoordTransition.Maintained, Direction.Left),
+    // Bottom -> Left
+    (faces.bottom, Direction.Left) ->
+      EdgeTransition(faces.left, CoordTransition.SwappedInverted, CoordTransition.ToMax, Direction.Up),
+    // Left -> Top
+    (faces.left, Direction.Up) ->
+      EdgeTransition(faces.top, CoordTransition.ToZero, CoordTransition.Swapped, Direction.Right),
+
+    // --- Rotation about z-axis counter-clockwise Front -> Right ---
+    // Front -> Right
+    (faces.front, Direction.Right) ->
+      EdgeTransition(faces.right, CoordTransition.SwappedInverted, CoordTransition.ToZero, Direction.Down),
+    // Right -> Back
+    (faces.right, Direction.Down) ->
+      EdgeTransition(faces.back, CoordTransition.ToZero, CoordTransition.SwappedInverted, Direction.Right),
+    // Back -> Left
+    (faces.back, Direction.Right) ->
+      EdgeTransition(faces.left, CoordTransition.ToZero, CoordTransition.Maintained, Direction.Right),
+    // Left -> Front
+    (faces.left, Direction.Right) ->
+      EdgeTransition(faces.front, CoordTransition.ToZero, CoordTransition.Maintained, Direction.Right),
+
+    // --- Rotation about z-axis clockwise Front -> Left ---
+    // Front -> Left
+    (faces.front, Direction.Left) ->
+      EdgeTransition(faces.left, CoordTransition.ToMax, CoordTransition.Maintained, Direction.Left),
+    // Left -> Back
+    (faces.left, Direction.Left) ->
+      EdgeTransition(faces.back, CoordTransition.ToMax, CoordTransition.Maintained, Direction.Left),
+    // Back -> Right
+    (faces.back, Direction.Left) ->
+      EdgeTransition(faces.right, CoordTransition.SwappedInverted, CoordTransition.ToMax, Direction.Up),
+    // Right -> Front
+    (faces.right, Direction.Up) ->
+      EdgeTransition(faces.front, CoordTransition.ToMax, CoordTransition.SwappedInverted, Direction.Left),
+  )
+
+  override def transitionFor(fromPlane: Plane, dir: Direction): EdgeTransition =
+    if isTest then
+      testTransitions.getOrElse((fromPlane, dir), throw Exception("Invalid transition attempted"))
+    else
+      ???
 
 
 object Day22 extends SolutionWithParser[(PlaneGrid, List[Instruction]), Long, Long]:
@@ -293,7 +410,8 @@ object Day22 extends SolutionWithParser[(PlaneGrid, List[Instruction]), Long, Lo
     GroveMapPt1(input(0)).execute(input(1)).score
 
   override def solvePart2(input: (PlaneGrid, List[Instruction])): Long =
-    GroveMapPt2(input(0)).execute(input(1)).score
+    // TODO: TESTING
+    GroveMapPt2(input(0), true).execute(input(1)).score
 
 
 @main def run(): Unit = Day22.run()
