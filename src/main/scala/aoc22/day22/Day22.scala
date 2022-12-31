@@ -142,23 +142,9 @@ case class EdgeTransition(toPlane: Plane, x: CoordTransition, y: CoordTransition
 //      case _ => throw Exception("No direction mapping for edge transition")
 
 
-// For part 1 we just need to consider wrapping transitions on a 2D plane
-def part1TransitionFor(planeGrid: PlaneGrid, fromPlane: Plane, dir: Direction): EdgeTransition =
-  // Move along the direction, potentially wrapping
-  var movedTo = (fromPlane.posInNet + dir.moveVec).floorMod(planeGrid.gridMaxBound + (1, 1).pos)
-  while planeGrid(movedTo).isEmpty do
-    movedTo = (movedTo + dir.moveVec).floorMod(planeGrid.gridMaxBound + (1, 1).pos)
+sealed trait GroveMap(val grid: PlaneGrid):
+  def transitionFor(fromPlane: Plane, dir: Direction): EdgeTransition
 
-  val toPlane = planeGrid(movedTo).get
-  dir match
-    case Direction.Left => EdgeTransition(toPlane, CoordTransition.ToMax, CoordTransition.Maintained, Direction.Left)
-    case Direction.Right => EdgeTransition(toPlane, CoordTransition.ToZero, CoordTransition.Maintained, Direction.Right)
-    case Direction.Up => EdgeTransition(toPlane, CoordTransition.Maintained, CoordTransition.ToMax, Direction.Up)
-    case Direction.Down => EdgeTransition(toPlane, CoordTransition.Maintained, CoordTransition.ToZero, Direction.Down)
-
-
-// A set of planes with information about how to map between them
-case class GroveMapPt1(grid: PlaneGrid):
   val initialPosition: PlayerPos = PlayerPos(grid.startingPlane, (0, 0).pos, Direction.Right)
 
   // Attempt to step forward, failing if blocked by a wall
@@ -171,7 +157,7 @@ case class GroveMapPt1(grid: PlaneGrid):
       val posBeforeTransition: PlayerPos =
         nextPos.copy(pos = nextPos.pos.constrainToBounds((0, 0).pos, nextPos.plane.maxBound))
       // Transition one step to cross planes
-      nextPos = part1TransitionFor(grid, priorPos.plane, priorPos.dir)(posBeforeTransition)
+      nextPos = transitionFor(priorPos.plane, priorPos.dir)(posBeforeTransition)
 
     // Whichever plane we are on now, see if we can actually move here
     if nextPos.plane.isWall(nextPos.pos) then
@@ -180,12 +166,13 @@ case class GroveMapPt1(grid: PlaneGrid):
     else
     // Move successfully to that spot
       Some(nextPos)
+
   @tailrec
   private def applySteps(priorPos: PlayerPos, steps: Int): PlayerPos =
     if steps <= 0 then
       priorPos
     else
-      // Attempt to apply the next step, stopping if we hit a wall
+    // Attempt to apply the next step, stopping if we hit a wall
       applyStep(priorPos) match
         case Some(nextPos) => applySteps(nextPos, steps - 1)
         case None => priorPos
@@ -200,6 +187,28 @@ case class GroveMapPt1(grid: PlaneGrid):
     instructions.foldLeft(initialPosition) { case (pos, instruction) =>
       applyInstruction(pos, instruction)
     }
+
+
+// Map is a flat surface with wrapping
+case class GroveMapPt1(override val grid: PlaneGrid) extends GroveMap(grid):
+  // For part 1 we just need to consider wrapping transitions on a 2D plane
+  override def transitionFor(fromPlane: Plane, dir: Direction): EdgeTransition =
+    // Move along the direction, potentially wrapping
+    var movedTo = (fromPlane.posInNet + dir.moveVec).floorMod(grid.gridMaxBound + (1, 1).pos)
+    while grid(movedTo).isEmpty do
+      movedTo = (movedTo + dir.moveVec).floorMod(grid.gridMaxBound + (1, 1).pos)
+
+    val toPlane = grid(movedTo).get
+    dir match
+      case Direction.Left => EdgeTransition(toPlane, CoordTransition.ToMax, CoordTransition.Maintained, Direction.Left)
+      case Direction.Right => EdgeTransition(toPlane, CoordTransition.ToZero, CoordTransition.Maintained, Direction.Right)
+      case Direction.Up => EdgeTransition(toPlane, CoordTransition.Maintained, CoordTransition.ToMax, Direction.Up)
+      case Direction.Down => EdgeTransition(toPlane, CoordTransition.Maintained, CoordTransition.ToZero, Direction.Down)
+
+
+// Map is a cube, with the grid representing a cube net
+case class GroveMapPt2(override val grid: PlaneGrid) extends GroveMap(grid):
+  override def transitionFor(fromPlane: Plane, dir: Direction): EdgeTransition = ???
 
 
 object Day22 extends SolutionWithParser[(PlaneGrid, List[Instruction]), Long, Long]:
@@ -283,7 +292,8 @@ object Day22 extends SolutionWithParser[(PlaneGrid, List[Instruction]), Long, Lo
   override def solvePart1(input: (PlaneGrid, List[Instruction])): Long =
     GroveMapPt1(input(0)).execute(input(1)).score
 
-  override def solvePart2(input: (PlaneGrid, List[Instruction])): Long = ???
+  override def solvePart2(input: (PlaneGrid, List[Instruction])): Long =
+    GroveMapPt2(input(0)).execute(input(1)).score
 
 
 @main def run(): Unit = Day22.run()
