@@ -204,6 +204,39 @@ class GroveMapPt1(override val grid: PlaneGrid) extends GroveMap(grid):
       case Direction.Down => EdgeTransition(toPlane, CoordTransition.Maintained, CoordTransition.ToZero, Direction.Down)
 
 
+/*
+Thoughts about generically building a cube and the edge transitions from a net
+---
+
+* Select the first thing we encounter top-to-bottom left-to-right as our 'top'
+* If we can figure out all the attachments for this (i.e. transitions we can make from this one),
+  we can then apply the same algorithm for each plane
+* We can represent the transitions of folds direct in the net pretty easily
+    - a down fold attaches x->x, y->0, down->down
+    - an up fold attaches x->x, y->max, up->up
+    - a left fold attaches x->max, y->y, left->left
+    - a right fold attaches x->0, y->y, right->right
+* Tough part is how to *compose* these
+* Can theoretically come up with cases for every transitive chain in the net, and the rule
+  ought to be consistent. But in the worst case this could have chains involving 5 moves
+  so we would really like a good composition rule
+* Examples from the test net:
+* single step
+    - down -> left attaches x->y, y->0, left->down
+      - right -> up attaches x->0, y->x, up->right
+    - down -> right attaches x->max-y, y->0, right->down
+      - left -> up attaches x->max, y->max-x, up->left
+    - right -> down attaches x->0, y->max-x, down->right
+      - ...
+    - down -> down does not attach
+    - left -> left does not attach
+* double step
+    - down -> left -> left attaches x-max-x, y->0, up->down
+    -
+*/
+
+
+
 // Map is a cube, with the grid representing a cube net
 class GroveMapPt2(rawGrid: PlaneGrid, isTest: Boolean) extends GroveMap(rawGrid):
   // We must choose a 'top' face and re-orient (rotate) other planes based on that
@@ -215,6 +248,9 @@ class GroveMapPt2(rawGrid: PlaneGrid, isTest: Boolean) extends GroveMap(rawGrid)
 
   // Hardcoded transition mapping for the test input
   // Treating the top row's only plane as the 'top' of the cube
+  //  ..t.
+  //  blf.
+  //  ..br
   private val testMapping: FaceMapping = FaceMapping(
     top = planeFor(2, 0),
     front = planeFor(2, 1),
@@ -224,8 +260,20 @@ class GroveMapPt2(rawGrid: PlaneGrid, isTest: Boolean) extends GroveMap(rawGrid)
     right = planeFor(3, 2)
   )
 
-  // TODO: Hardcode or make generic
-  private def realInputMapping: FaceMapping = ???
+  // Hardcoded transition mapping for the real input
+  // Treating the top row's leftmost plane as the 'top' of the cube
+  //  .tr
+  //  .f.
+  //  bb.
+  //  l..
+  private def realInputMapping: FaceMapping = FaceMapping(
+    top = planeFor(1, 0),
+    front = planeFor(1, 1),
+    bottom = planeFor(1, 2),
+    back = planeFor(0, 2),
+    left = planeFor(0, 3),
+    right = planeFor(2, 0)
+  )
 
   private val faces: FaceMapping =
     if isTest then
@@ -233,8 +281,7 @@ class GroveMapPt2(rawGrid: PlaneGrid, isTest: Boolean) extends GroveMap(rawGrid)
     else
       realInputMapping
 
-  // Transition mappings defined by case
-  // TODO: Sadly specific to test mapping I think...
+  // Transition mappings defined by case for the test cube and real cube
   private val testTransitions: Map[(Plane, Direction), EdgeTransition] = Map(
     // --- Rotation about x-axis counter-clockwise Top -> Front ---
     // Top -> Front
@@ -319,6 +366,26 @@ class GroveMapPt2(rawGrid: PlaneGrid, isTest: Boolean) extends GroveMap(rawGrid)
     // Right -> Front
     (faces.right, Direction.Up) ->
       EdgeTransition(faces.front, CoordTransition.ToMax, CoordTransition.SwappedInverted, Direction.Left),
+  )
+
+  /*
+    .tr
+    .f.
+    bb.
+    l..
+  */
+
+  private val realInputTransitions: Map[(Plane, Direction), EdgeTransition] = Map(
+    // --- Rotation about x-axis counter-clockwise Top -> Front ---
+    // Top -> Front
+    (faces.front, Direction.Left) ->
+      EdgeTransition(faces.left, CoordTransition.ToMax, CoordTransition.Maintained, Direction.Left),
+
+    // --- Rotation about x-axis clockwise Top -> Back ---
+    // --- Rotation about y-axis counter-clockwise Top -> Left ---
+    // --- Rotation about y-axis clockwise Top -> Right ---
+    // --- Rotation about z-axis counter-clockwise Front -> Right ---
+    // --- Rotation about z-axis clockwise Front -> Left ---
   )
 
   override def transitionFor(fromPlane: Plane, dir: Direction): EdgeTransition =
